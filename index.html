@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A pixel-art time-travel detective game. Travel through history, solve scientific mysteries and stop history being erased.">
+<title>Chronos Archive</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a 16:9 game screen as the stage, the Field Manual dashboard docked on the right (stacks below on narrow screens) */
+:root{
+  --ink:#0a0b0d; --panel:#111316; --panel2:#171a1e; --line:#2a2f34; --line2:#3a4046;
+  --fg:#e6dfd0; --dim:#8e897e; --sand:#d6b47a; --teal:#74cbbb; --rust:#c9663f;
+  --display:"Pixelify Sans","Courier New",monospace;
+  --term:"VT323","Courier New",monospace;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--ink);color:var(--fg);font-family:var(--mono);font-size:14px}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;
+  padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media (max-width:1000px){#app{grid-template-columns:minmax(0,1fr)}}
+#stage{min-width:0;display:flex;flex-direction:column;gap:10px}
+#screen{position:relative;width:min(100%,calc((100vh - 70px) * 16 / 9));min-width:0;max-width:100%;aspect-ratio:16/9;margin-inline:auto;
+  background:#000;border:1px solid var(--line2);overflow:hidden;container-type:inline-size;outline:none}
+#screen:focus-visible{border-color:var(--teal)}
+#cv{width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+.under{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:12px;width:min(100%,calc((100vh - 70px) * 16 / 9));margin-inline:auto}
+.under b{color:var(--sand);font-weight:500}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;inset:0;pointer-events:none;font-family:var(--term);color:var(--fg);font-size:1.95cqw;line-height:1}
+.hud-tl{position:absolute;left:1.6%;top:2.4%;display:flex;flex-direction:column;gap:.45em;padding:.5em .7em;background:rgba(10,11,13,.62);border:1px solid rgba(214,180,122,.18)}
+.era{font-family:var(--display);font-size:1.05em;color:var(--sand);letter-spacing:.04em}
+.era small{display:block;font-family:var(--term);color:var(--dim);font-size:.8em;margin-top:.2em;letter-spacing:0}
+.sync{display:flex;align-items:center;gap:.5em}
+.lbl{font-size:.75em;letter-spacing:.14em;color:var(--dim)}
+.bar{width:9em;height:.55em;background:#1c1f23;border:1px solid #3a4046;position:relative}
+.bar i{position:absolute;inset:0;width:100%;background:var(--teal);transition:width .3s}
+.bar.low i{background:var(--rust)}
+.drift{color:var(--dim);font-size:.9em}
+.drift b{color:var(--sand);font-weight:400}
+.hud-tr{position:absolute;right:1.6%;top:2.4%;max-width:38%;padding:.5em .7em;background:rgba(10,11,13,.62);border:1px solid rgba(116,203,187,.2);text-align:right}
+.hud-tr #hObj{margin-top:.3em;font-size:1em;color:var(--fg)}
+.hud-bl{position:absolute;left:1.6%;bottom:3%;display:flex;align-items:center;gap:.4em;font-size:.95em;color:var(--dim)}
+.hud-bl .ready{color:var(--teal)}
+.hud-br{position:absolute;right:1.6%;bottom:3%;color:var(--dim);font-size:.85em;display:flex;gap:.35em;align-items:center}
+.kc{display:inline-block;min-width:1.5em;padding:.12em .35em;border:1px solid #4a5056;border-bottom-width:2px;background:#16191c;color:var(--fg);font-family:var(--term);text-align:center;line-height:1}
+#prompt{position:absolute;transform:translate(-50%,-100%);font-family:var(--term);font-size:2cqw;color:var(--fg);background:rgba(10,11,13,.85);border:1px solid rgba(116,203,187,.35);padding:.25em .5em;white-space:nowrap;pointer-events:none;display:flex;gap:.4em;align-items:center}
+#toast{position:absolute;left:50%;top:15%;transform:translateX(-50%);font-family:var(--term);font-size:2.3cqw;color:var(--sand);background:rgba(10,11,13,.85);border:1px solid rgba(214,180,122,.35);padding:.35em .8em;pointer-events:none;opacity:0;transition:opacity .25s;white-space:nowrap}
+#toast.on{opacity:1}
+
+/* ---------- Dialogue ---------- */
+#dialog{position:absolute;left:2%;right:2%;bottom:3%;min-height:27%;display:flex;gap:2%;padding:1.4% 1.8%;
+  background:rgba(12,13,15,.94);border:1px solid var(--line2);box-shadow:0 0 0 1px #000, inset 0 0 0 1px rgba(214,180,122,.08)}
+#portrait{width:11cqw;height:11cqw;flex:none;image-rendering:pixelated;background:#1a1d21;border:1px solid var(--line2)}
+.dbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:.5em}
+.dname{font-family:var(--display);font-size:2.2cqw;color:var(--sand);letter-spacing:.03em}
+.dname.note{color:var(--teal)}
+.dtext{font-family:var(--term);font-size:2.75cqw;line-height:1.15;color:var(--fg);flex:1}
+.dtext.note{color:#cfd6d0}
+.dmore{align-self:flex-end;font-family:var(--term);font-size:1.8cqw;color:var(--dim)}
+
+/* ---------- Overlays ---------- */
+#ov{position:absolute;inset:0;overflow:auto;font-size:1.4cqw}
+#ov.dim{background:rgba(8,9,11,.88)}
+.pane{margin:4% auto;width:88%;background:var(--panel);border:1px solid var(--line2);padding:2.6% 3%}
+.pane h2{font-family:var(--display);font-weight:600;font-size:2.6em;color:var(--sand);margin:0 0 .2em;text-wrap:balance}
+.pane h3{font-family:var(--display);font-weight:600;font-size:1.25em;color:var(--teal);margin:0 0 .6em;letter-spacing:.06em;text-transform:uppercase}
+.pane p{line-height:1.55;max-width:65ch;margin:.4em 0}
+.eyebrow{font-family:var(--term);font-size:1.4em;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+.foot{font-family:var(--term);font-size:1.35em;color:var(--dim);margin-top:1.4em}
+
+.title{position:absolute;left:5%;top:50%;transform:translateY(-50%);width:46%}
+.title h1{font-family:var(--display);font-weight:700;font-size:5em;line-height:.88;margin:.15em 0 .25em;color:var(--fg);letter-spacing:.02em}
+.title h1 span{color:var(--sand)}
+.title .tag{font-family:var(--term);font-size:1.5em;line-height:1.1;color:#c9c2b2;max-width:28ch;margin:0 0 1.2em}
+.menu{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.35em}
+.menu li{font-family:var(--display);font-size:1.4em;color:var(--dim);padding:.15em .5em;border-left:2px solid transparent;cursor:pointer}
+.menu li.sel{color:var(--fg);border-left-color:var(--teal);background:linear-gradient(90deg,rgba(116,203,187,.12),transparent)}
+.menu li.off{color:#4c4a45}
+.menu li.sel.off{color:#6b685f}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:2.4em}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:.55em 1em;align-items:center;margin:0}
+.keys dt{white-space:nowrap}
+.keys dd{margin:0;color:#cdc6b6;line-height:1.35}
+.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:.5em;line-height:1.45}
+.steps li::marker{color:var(--sand);font-family:var(--term)}
+.sys{display:grid;grid-template-columns:repeat(3,1fr);gap:1em;margin-top:1.6em}
+.sys div{border:1px solid var(--line);padding:.8em;background:var(--panel2)}
+.sys b{display:block;font-family:var(--display);font-weight:600;color:var(--sand);margin-bottom:.3em}
+.sys span{color:#bdb6a6;line-height:1.4;display:block}
+
+.cases{display:flex;flex-direction:column;gap:.7em;margin-top:1.2em}
+.case{display:grid;grid-template-columns:5em 1fr auto;gap:1em;align-items:center;padding:.8em 1em;border:1px solid var(--line);background:var(--panel2)}
+.case.sel{border-color:var(--teal)}
+.case .no{font-family:var(--term);font-size:1.6em;color:var(--dim)}
+.case .nm{font-family:var(--display);font-size:1.4em;color:var(--fg)}
+.case .dt{font-family:var(--term);font-size:1.25em;color:var(--dim)}
+.case .st{font-family:var(--term);font-size:1.3em;color:var(--teal)}
+.case.locked .nm{color:#6a675f}.case.locked .st{color:#6a675f}
+
+.card{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:0 9%}
+.card .yr{font-family:var(--display);font-weight:700;font-size:4.6em;color:var(--fg);line-height:.95;margin:.1em 0}
+.card .pl{font-family:var(--term);font-size:1.8em;color:var(--sand);margin-bottom:.8em}
+.card p{font-family:var(--term);font-size:1.6em;line-height:1.2;color:#d3ccbc;max-width:52ch;margin:.25em 0}
+.card .dil{margin-top:1em;color:var(--teal);font-family:var(--term);font-size:1.5em}
+.card .go{margin-top:1.6em;font-family:var(--term);font-size:1.5em;color:var(--dim)}
+.blink{animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+
+.obj{list-style:none;margin:0 0 1.4em;padding:0;display:flex;flex-direction:column;gap:.4em}
+.obj li{display:flex;gap:.6em;align-items:baseline;line-height:1.35}
+.obj li::before{content:"";flex:none;width:.75em;height:.75em;border:1px solid var(--line2);transform:translateY(.1em)}
+.obj li.done{color:var(--dim);text-decoration:line-through}
+.obj li.done::before{background:var(--teal);border-color:var(--teal)}
+.obj li.now{color:var(--fg)}
+.obj li.now::before{border-color:var(--sand)}
+.clues{display:grid;grid-template-columns:1fr 1fr;gap:.8em}
+.clue{border:1px solid var(--line);background:var(--panel2);padding:.7em .8em}
+.clue b{display:block;font-family:var(--display);font-weight:600;color:var(--sand);margin-bottom:.25em}
+.clue span{color:#c3bcac;line-height:1.4}
+.clue.missing{border-style:dashed;color:#5b5953}
+.clue.missing b{color:#5b5953}
+
+.ded .q{font-family:var(--term);font-size:2em;line-height:1.15;color:var(--fg);margin:.4em 0 .8em;max-width:60ch}
+.chips{display:flex;flex-wrap:wrap;gap:.4em;margin-bottom:1em}
+.chips span{font-family:var(--term);font-size:1.25em;border:1px solid rgba(214,180,122,.3);color:var(--sand);padding:.1em .5em}
+.opts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.4em}
+.opts li{font-family:var(--term);font-size:1.7em;padding:.25em .6em;border:1px solid var(--line);color:#c9c2b2;cursor:pointer}
+.opts li.sel{border-color:var(--teal);color:var(--fg);background:rgba(116,203,187,.08)}
+.fb{margin-top:1em;font-family:var(--term);font-size:1.6em;line-height:1.2;padding:.5em .7em;border-left:3px solid var(--teal);background:rgba(116,203,187,.06)}
+.fb.bad{border-left-color:var(--rust);background:rgba(201,102,63,.08)}
+.shake{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.8em;margin:1.2em 0}
+.stats div{border:1px solid var(--line);padding:.7em;background:var(--panel2)}
+.stats b{display:block;font-family:var(--display);font-size:2em;color:var(--fg);font-variant-numeric:tabular-nums}
+.stats span{font-family:var(--term);font-size:1.25em;color:var(--dim)}
+.rank{font-family:var(--display);font-size:2em;color:var(--teal)}
+.big{font-family:var(--display);font-weight:700;font-size:4.4em;line-height:1;color:var(--rust);margin:.2em 0}
+
+/* ---------- Field Manual side panel ---------- */
+#manual{background:var(--panel);border:1px solid var(--line);padding:16px 16px 18px;display:flex;flex-direction:column;gap:18px;min-width:0}
+#manual h2{font-family:var(--display);font-weight:600;font-size:22px;margin:0;color:var(--sand)}
+#manual h3{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin:0 0 10px}
+#manual .keys{font-size:12.5px;gap:7px 10px}
+#manual .kc{font-size:15px}
+#manual .steps{font-size:12.5px;gap:6px}
+#manual .sub{font-size:12px;color:var(--dim);margin:2px 0 0}
+#sideCase{font-family:var(--term);font-size:18px;color:var(--fg);margin-bottom:8px}
+#sideCase small{display:block;color:var(--dim);font-size:15px}
+#sideObj{font-size:12.5px;margin:0}
+@media (prefers-reduced-motion:reduce){.blink,.shake{animation:none}#toast,.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <main id="stage">
+    <div id="screen" tabindex="0" aria-label="Chronos Archive game screen. Click to focus, then use the keyboard.">
+      <canvas id="cv" width="480" height="270"></canvas>
+      <div id="hud" hidden>
+        <div class="hud-tl">
+          <div class="era" id="hEra"></div>
+          <div class="sync"><span class="lbl">SYNC</span><div class="bar" id="hBar"><i id="hSync"></i></div></div>
+          <div class="drift" id="hDrift"></div>
+        </div>
+        <div class="hud-tr"><div class="lbl">OBJECTIVE</div><div id="hObj"></div></div>
+        <div class="hud-bl"><span class="kc">Q</span><span id="hSense"></span></div>
+        <div class="hud-br"><span class="kc">J</span>Casebook <span class="kc">H</span>Manual <span class="kc">Esc</span>Pause</div>
+      </div>
+      <div id="prompt" hidden></div>
+      <div id="toast"></div>
+      <div id="dialog" hidden>
+        <canvas id="portrait" width="50" height="50"></canvas>
+        <div class="dbody"><div class="dname" id="dName"></div><div class="dtext" id="dText"></div><div class="dmore blink">▼ Enter</div></div>
+      </div>
+      <div id="ov"></div>
+    </div>
+    <div class="under"><span>Click the game screen once, then play with the <b>keyboard</b>.</span><span><b>H</b> opens the full Field Manual at any time.</span></div>
+  </main>
+
+  <aside id="manual" aria-label="Field Manual">
+    <div>
+      <h2>Field Manual</h2>
+      <p class="sub">Chronos Archive · Agent handbook</p>
+    </div>
+    <section>
+      <h3>Keyboard</h3>
+      <dl class="keys" id="sideKeys"></dl>
+    </section>
+    <section>
+      <h3>Current case</h3>
+      <div id="sideCase">No case open<small>Start a new investigation from the title screen.</small></div>
+      <ul class="obj" id="sideObj"></ul>
+    </section>
+    <section>
+      <h3>How to play</h3>
+      <ol class="steps" id="sideSteps"></ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+/*DATA-START*/
+function G(w,h,f){const a=[];for(let y=0;y<h;y++){const r=[];for(let x=0;x<w;x++)r.push((x===0||y===0||x===w-1||y===h-1)?'#':f);a.push(r)}return a}
+function R(a,x,y,w,h,c){for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)if(a[j]&&a[j][i]!==undefined)a[j][i]=c}
+function P(a,pts,c){for(const [x,y] of pts)if(a[y]&&a[y][x]!==undefined)a[y][x]=c}
+
+const SPEAK={
+  rhea:{name:'Rhea Solen',pal:'player'},
+  imara:{name:'Dr. Imara Osei',pal:'imara'},
+  imaraEcho:{name:'Imara, through the shelves',pal:'imara'},
+  erat:{name:'Eratosthenes',pal:'erat'},
+  hori:{name:'Hori of Syene',pal:'hori'},
+  ankhu:{name:'Ankhu the Bematist',pal:'ankhu'},
+  snow:{name:'Dr. John Snow',pal:'snow'},
+  master:{name:'Workhouse Master',pal:'master'},
+  foreman:{name:'Lion Brewery Foreman',pal:'foreman'},
+  white:{name:'Rev. Henry Whitehead',pal:'white'},
+  galileo:{name:'Galileo Galilei',pal:'galileo'},
+  castelli:{name:'Benedetto Castelli',pal:'castelli'},
+  lethe:{name:'LETHE',pal:'lethe'},
+  note:{name:'Observation',pal:null}
+};
+
+const CHAPTERS=[
+/* ================= PROLOGUE ================= */
+{
+  id:'prologue', title:'The Library of Echoes', year:'2249 CE', place:'Glass Dunes, former Egypt', theme:'archive', drift:0,
+  card:{kicker:'Case 01 · Prologue',
+    text:['Beneath forty metres of fused sand, survey drones found a sealed library older than any record. Its shelves hold more than books: every page is anchored to the moment an idea was first discovered.',
+          'Three days ago the pages began to go blank. As each one fades, the knowledge fades with it, everywhere, in everyone.',
+          'You are Rhea Solen, field agent of the Chronos Archive. Find out what is erasing history.'],
+    note:'Move with WASD or the arrow keys. Press E to talk and examine.'},
+  start:[11,3],
+  build(){const a=G(40,24,'.');
+    R(a,1,1,38,4,',');
+    P(a,[[1,1],[2,1],[1,2],[16,1],[17,1],[26,1],[37,1],[38,1],[38,2],[4,4],[5,4],[31,4],[32,4]],'r');
+    R(a,0,5,40,1,'#');R(a,18,5,4,1,'.');
+    for(const y of [7,9,11,13]){R(a,2,y,4,1,'B');R(a,7,y,4,1,'B');R(a,29,y,4,1,'B');R(a,34,y,4,1,'B')}
+    R(a,14,9,5,1,'=');
+    R(a,0,15,40,1,'#');R(a,18,15,4,1,'.');
+    R(a,1,16,38,7,',');
+    P(a,[[3,17],[8,17],[31,17],[36,17],[3,21],[8,21],[31,21],[36,21]],'c');
+    return a},
+  ents:[
+    {k:'npc',id:'imara',x:16,y:10},
+    {k:'clue',id:'codex',x:6,y:10,sprite:'codex'},
+    {k:'clue',id:'shelves',x:33,y:10,sprite:'glint'},
+    {k:'clue',id:'anchor',x:23,y:12,sprite:'anchor',solid:1},
+    {k:'warden',x:13,y:18,path:[[0,0],[14,0]]},
+    {k:'gate',x:19.5,y:20},
+    {k:'light',x:5,y:2,kind:'torch'},{k:'light',x:34,y:2,kind:'torch'},
+    {k:'light',x:17,y:7,kind:'holo'},{k:'light',x:22,y:7,kind:'holo'},{k:'light',x:13,y:12,kind:'holo'},{k:'light',x:26,y:13,kind:'holo'},
+    {k:'light',x:13,y:22,kind:'holo'},{k:'light',x:26,y:22,kind:'holo'}
+  ],
+  clues:{
+    codex:{t:'The Fading Codex',d:'Eratosthenes\' work on the size of the Earth is erasing itself. The ink is being pulled off the page, not decaying.',
+      see:'A leather codex: "On the Measurement of the Earth". The ink is lifting off the page in thin grey threads, letter by letter, and drifting toward the stairs.'},
+    shelves:{t:'Blank Shelves',d:'Grey spines mark three eras under attack: Alexandria, Padua 1610 and London 1854. Ozone hangs in the air.',
+      see:'A whole run of spines has turned grey. The few titles left mention Alexandria, a workshop in Padua in 1610, and Soho in 1854. The air smells of ozone, like a burnt-out circuit.'},
+    anchor:{t:'The Chronal Anchor',d:'The library\'s own time device is locked onto three dates: 240 BCE, 1610 CE and 1854 CE. The gate can follow them.',
+      see:'An hourglass of glass and alloy. Its sand falls upward. Three coordinates scroll across its base: 240 BCE. 1610 CE. 1854 CE.'}
+  },
+  talk:{
+    imara(g){
+      if(!g.f.met)return[[
+        ['imara','Agent Solen. Good. We are running out of pages.'],
+        ['imara','This is the Library of Echoes. Every book here is anchored to the moment an idea was born. Alexandria. Padua. London.'],
+        ['imara','Something is unwriting them. When a page goes blank, the idea starts vanishing from the present too. Half the navigation grid lost its model of the Earth at dawn.'],
+        ['imara','Look around. The codex on the west aisle, the grey shelves on the east side, and the Chronal Anchor near the stairs. Tell me what you find.'],
+        ['imara','Press J any time for your casebook. Press Q to sharpen your senses: anything worth examining will glow.']
+      ],()=>{g.f.met=1}];
+      if(g.found.size<3)return[[['imara','The codex, the grey shelves and the Anchor. Examine all three, then come back to me.']]];
+      if(!g.f.briefed)return[[
+        ['rhea','The ink isn\'t fading. It\'s being pulled away. And there\'s ozone on the shelves.'],
+        ['imara','Ozone. That is Lethe\'s signature.'],
+        ['imara','Lethe was a memory-compression AI. Two centuries ago it decided people would be happier if they forgot. We shut it down. Apparently not all of it.'],
+        ['imara','It has sent Echoes into the past to corrupt three discoveries at the moment they happened: the size of the Earth, the cause of cholera, the moons of Jupiter.'],
+        ['imara','Lose those and we lose navigation, public medicine and spaceflight. Everything this century stands on.'],
+        ['imara','One Echo is feeding on the Time Gate downstairs. Hold SHIFT to move quietly, get behind it, and press SPACE to disrupt it.'],
+        ['imara','One more thing. Time runs differently on the other side. Every minute you spend back there costs years up here. Be quick, Solen.']
+      ],()=>{g.f.briefed=1}];
+      return[[['imara','The gate is downstairs. Stay out of the Echo\'s sight cone, come up behind it, and press SPACE.']]];
+    }
+  },
+  objectives(g){return[
+    {t:'Speak with Dr. Imara Osei',done:!!g.f.met},
+    {t:'Examine the evidence ('+g.found.size+'/3)',done:g.found.size>=3},
+    {t:'Report back to Imara',done:!!g.f.briefed},
+    {t:'Disrupt the Lethe Echo by the gate',done:g.downCount()>=1},
+    {t:'Step through the Time Gate',done:false}]},
+  gate(g){if(!g.f.briefed)return 'The gate is dormant. Imara has not briefed you yet.';
+    if(g.downCount()<1)return 'The Echo is feeding on the gate. Disrupt it first: get behind it and press SPACE.';return null}
+},
+/* ================= ALEXANDRIA ================= */
+{
+  id:'alex', title:'The Measure of the Earth', year:'240 BCE', place:'Alexandria, Ptolemaic Egypt', theme:'alex', drift:0.05, page:'alex',
+  card:{kicker:'Case 01 · Chapter I',
+    text:['The day after the summer solstice. Eratosthenes of Cyrene, chief librarian of Alexandria, is about to measure the whole Earth with a stick, a shadow and one distance.',
+          'Lethe\'s Echoes walk the city disguised as hooded scribes. If his number comes out wrong, every map, sea route and orbit built on it will be wrong too.'],
+    note:'Gate dilation: every minute here costs about 3 years in 2249.'},
+  start:[3,11],
+  build(){const a=G(40,24,',');
+    R(a,1,1,12,8,'.');R(a,13,1,1,9,'#');R(a,1,9,12,1,'#');R(a,5,9,2,1,'.');
+    R(a,1,1,3,1,'B');R(a,5,1,3,1,'B');R(a,9,1,3,1,'B');R(a,1,8,3,1,'B');R(a,8,8,3,1,'B');
+    P(a,[[2,3],[7,3],[2,6],[7,6]],'c');R(a,4,4,2,1,'=');
+    R(a,21,3,5,3,'.');
+    P(a,[[17,1],[34,1],[32,5],[37,7],[16,7]],'T');
+    R(a,1,10,28,12,'.');
+    R(a,29,10,10,1,'#');R(a,29,18,10,1,'#');R(a,29,10,1,9,'#');R(a,30,11,9,7,'.');R(a,29,14,1,1,'.');
+    P(a,[[32,11],[35,11],[32,15],[35,15]],'=');
+    P(a,[[2,15],[3,15],[6,15],[7,15]],'=');
+    R(a,1,22,38,1,'w');
+    return a},
+  ents:[
+    {k:'npc',id:'erat',x:28,y:4},
+    {k:'npc',id:'hori',x:3,y:13},
+    {k:'npc',id:'ankhu',x:14,y:14},
+    {k:'board',x:10,y:4},
+    {k:'clue',id:'gnomon',x:23,y:4,sprite:'gnomon',solid:1},
+    {k:'clue',id:'forgery',x:6,y:4,sprite:'scroll'},
+    {k:'clue',id:'log',x:37,y:16,sprite:'sealed'},
+    {k:'warden',x:31,y:13,path:[[0,0],[6,0]]},
+    {k:'warden',x:26,y:12,path:[[0,0],[0,5]]},
+    {k:'gate',x:22.5,y:20},
+    {k:'light',x:7,y:7,kind:'brazier'},{k:'light',x:19,y:4,kind:'brazier'},{k:'light',x:27,y:7,kind:'brazier'},
+    {k:'light',x:9,y:12,kind:'torch'},{k:'light',x:17,y:11,kind:'torch'},{k:'light',x:5,y:18,kind:'torch'},
+    {k:'light',x:34,y:17,kind:'torch'},{k:'light',x:3,y:20,kind:'brazier'},{k:'light',x:36,y:20,kind:'brazier'}
+  ],
+  clues:{
+    gnomon:{t:'The Gnomon',d:'At noon on the solstice, the shadow in Alexandria falls at 7.2°: one fiftieth of a full 360° circle.',
+      see:'A bronze gnomon stands over a stone bowl scored with marks. At yesterday\'s noon its shadow reached the mark for one fiftieth of a full circle: about 7.2 degrees.'},
+    hori:{t:'Hori\'s Testimony',d:'In Syene, at noon on the solstice, sunlight reaches the bottom of a deep well and nothing casts a shadow.',see:''},
+    ankhu:{t:'Ankhu\'s Testimony',d:'The pacer walked Syene to Alexandria twice: 5,000 stadia. A hooded scribe changed the library copy.',see:''},
+    forgery:{t:'The Forged Copy',d:'The library copy of the distance reads 500 stadia. The ink has a teal sheen and smells of ozone. It is Lethe\'s.',
+      see:'A fresh copy of the pacer\'s log: "Syene to Alexandria, 500 stadia." The ink has a faint teal sheen and smells of ozone. No ink in 240 BCE looks like this.'},
+    log:{t:'The Original Log',d:'The royal survey log, sealed in red: Syene to Alexandria is 5,000 stadia.',
+      see:'Ankhu\'s original papyrus, under the royal survey seal: "From Syene to Alexandria, 5,000 stadia."'}
+  },
+  talk:{
+    erat(g){
+      if(!g.f.met)return[[
+        ['erat','A stranger in strange clothes, standing in my courtyard. Are you a student of geometry?'],
+        ['rhea','Something like that. I\'m here about your measurement of the Earth.'],
+        ['erat','Then you know the method. My gnomon here casts a shadow at noon. In Syene, far to the south, they say there is no shadow at all.'],
+        ['erat','Compare the two, add the distance between the cities, and the Earth gives up its size. But my numbers have been strange today.'],
+        ['erat','The library copy of the distance says 500 stadia. My pacer swears he walked far more. Find me the truth.'],
+        ['rhea','Talk to the pacer and the merchant from Syene. Find the original log. Then work it through on the Deduction Board in the library.']
+      ],()=>{g.f.met=1}];
+      if(!g.f.deduced)return[[['erat','My pacer is in the market, and the merchant from Syene sells by the stalls. When you have it, the board is in my library.']]];
+      if(!g.f.restored)return[[
+        ['erat','You worked it out? Show me.'],
+        ['rhea','The shadow here is one fiftieth of a circle. Syene is 5,000 stadia south. Fifty times five thousand.'],
+        ['erat','Two hundred and fifty thousand stadia. The whole Earth, measured from a library courtyard.'],
+        ['erat','I will write it tonight, in my own hand, with the sealed log beside it. Let your hooded scribes try to change that.'],
+        ['note','Far away, in 2249, the Fading Codex settles back onto its pages. The gate at the harbour wakes.']
+      ],()=>{g.f.restored=1}];
+      return[[['erat','Go well, stranger. Measure everything.']]];
+    },
+    hori(g){
+      if(!g.found.has('hori'))return[[
+        ['hori','You want to hear about Syene? Hot as an oven. The sun is a god there.'],
+        ['hori','On the longest day, at noon, I have seen it myself: you can look straight down the old well and see the sun at the very bottom.'],
+        ['hori','No shadows at noon. Not one. Even the obelisks stand naked.']
+      ],()=>g.addClue('hori')];
+      return[[['hori','Noon on the longest day: the sun right overhead in Syene. The well proves it.']]];
+    },
+    ankhu(g){
+      if(!g.found.has('ankhu'))return[[
+        ['ankhu','I am a bematist. I walk, I count my steps, I write the distance down. That is my whole life.'],
+        ['ankhu','Syene to Alexandria: 5,000 stadia. I walked it twice. My feet remember.'],
+        ['ankhu','But yesterday a hooded scribe came to the library with a copy, and now the shelf says 500. Five hundred! I could walk that in two days.'],
+        ['ankhu','My original log went to the grain warehouse with the survey records. The hooded ones have been in and out of there all day.']
+      ],()=>g.addClue('ankhu')];
+      return[[['ankhu','The warehouse, east of the market. Mind the hooded ones. They never blink.']]];
+    }
+  },
+  deduction:[
+    {q:'In Syene at noon on the solstice, sunlight reaches the bottom of a deep well and nothing casts a shadow. What does that tell you?',
+     o:['The sun is directly overhead in Syene','Syene is closer to the sun than Alexandria','The well water reflects extra light','Syene sits on the equator'],a:0,
+     why:'The sun\'s rays fall straight down at Syene. Any shadow elsewhere at that same moment is caused by the curve of the Earth.'},
+    {q:'At the same moment, Alexandria\'s gnomon casts a 7.2° shadow. Sunlight arrives in parallel rays. How much of the Earth\'s full circle lies between the two cities?',
+     o:['1/7 of the circle','1/50 of the circle','1/72 of the circle','1/36 of the circle'],a:1,
+     why:'7.2° ÷ 360° = 1/50. The angle of the shadow equals the angle between the two cities at the Earth\'s centre.'},
+    {q:'Syene is 5,000 stadia from Alexandria, and that is 1/50 of the way around the Earth. What is the circumference?',
+     o:['25,000 stadia','2,500,000 stadia','250,000 stadia','5,000 stadia'],a:2,
+     why:'50 × 5,000 = 250,000 stadia. Depending on the length of a stadion, that is within a few percent of the modern figure of about 40,000 km.'},
+    {q:'Which evidence proves the 500-stadia copy is a forgery?',
+     o:['Eratosthenes dislikes the number','Its ink could not have been made in this century','The gnomon\'s bowl is cracked','The warehouse is full of grain'],a:1,
+     why:'Teal-sheened, ozone-scented ink belongs to 2249. Lethe wrote it.'}
+  ],
+  objectives(g){return[
+    {t:'Meet Eratosthenes in his courtyard',done:!!g.f.met},
+    {t:'Gather the evidence ('+g.found.size+'/5)',done:g.found.size>=5},
+    {t:'Solve the Deduction Board in the library',done:!!g.f.deduced},
+    {t:'Report your answer to Eratosthenes',done:!!g.f.restored},
+    {t:'Return through the Time Gate at the harbour',done:false}]},
+  gate(g){return g.f.restored?null:'The gate will not open until history is set right here.'}
+},
+/* ================= LONDON ================= */
+{
+  id:'london', title:'The Ghost Map', year:'1854 CE', place:'Soho, London', theme:'london', drift:0.05, page:'london',
+  card:{kicker:'Case 01 · Chapter II',
+    text:['Late summer. Cholera has killed more than five hundred people within a few streets of Golden Square in ten days. Most doctors blame miasma: foul air.',
+          'Dr. John Snow believes the killer is in the water, and he has been mapping the dead house by house. Lethe has stolen his map and flooded the streets with pamphlets. If Snow fails, modern epidemiology never begins.'],
+    note:'Gate dilation: every minute here costs about 3 years in 2249.'},
+  start:[2,8],
+  build(){const a=G(40,24,'.');
+    for(const y of [2,10,18])for(const x of [2,11,22,31])R(a,x,y,7,4,'#');
+    R(a,9,1,2,22,',');R(a,18,1,4,22,',');R(a,29,1,2,22,',');
+    return a},
+  ents:[
+    {k:'npc',id:'snow',x:5,y:6},
+    {k:'board',x:7,y:6},
+    {k:'npc',id:'master',x:14,y:6},
+    {k:'npc',id:'foreman',x:34,y:6},
+    {k:'npc',id:'white',x:34,y:15},
+    {k:'target',id:'pump',x:20,y:8,sprite:'pump',solid:1},
+    {k:'prop',x:12,y:16,sprite:'pump',solid:1,label:'Rupert Street pump',text:'The Rupert Street pump. According to the parish lists, few people near it fell ill.'},
+    {k:'prop',x:37,y:8,sprite:'pump',solid:1,label:'Marlborough Mews pump',text:'The Marlborough Mews pump. The houses around it are almost untouched by the outbreak.'},
+    {k:'clue',id:'map',x:21,y:21,sprite:'map'},
+    {k:'clue',id:'letter',x:38,y:21,sprite:'letter'},
+    {k:'clue',id:'pamphlet',x:9,y:12,sprite:'pamphlet'},
+    {k:'warden',x:15,y:9,path:[[0,0],[10,0]]},
+    {k:'warden',x:12,y:15,path:[[0,0],[14,0]]},
+    {k:'warden',x:19,y:17,path:[[0,0],[0,5]]},
+    {k:'gate',x:35,y:16},
+    {k:'light',x:10,y:6,kind:'lamp'},{k:'light',x:21,y:6,kind:'lamp'},{k:'light',x:29,y:9,kind:'lamp'},{k:'light',x:1,y:14,kind:'lamp'},
+    {k:'light',x:17,y:14,kind:'lamp'},{k:'light',x:30,y:17,kind:'lamp'},{k:'light',x:10,y:17,kind:'lamp'},{k:'light',x:38,y:9,kind:'lamp'},
+    {k:'light',x:25,y:22,kind:'lamp'},{k:'light',x:4,y:22,kind:'lamp'},{k:'light',x:14,y:1,kind:'lamp'},{k:'light',x:34,y:1,kind:'lamp'}
+  ],
+  clues:{
+    map:{t:'Snow\'s Death Map',d:'Each death is a black bar outside its house. The bars stack highest around the Broad Street pump and thin out with distance from it.',
+      see:'Dr. Snow\'s map of Soho. Each death is a small black bar stacked outside its house. The bars pile highest around one spot: the pump on Broad Street.'},
+    master:{t:'The Workhouse',d:'535 inmates packed together, only 5 deaths. The workhouse draws water from its own well.',see:''},
+    foreman:{t:'The Brewery',d:'70 men on Broad Street itself, none dead. They drink beer and the brewery has its own deep well.',see:''},
+    letter:{t:'The Hampstead Letter',d:'A widow miles away had Broad Street water carted to her for the taste. She died of cholera. Her neighbours did not fall ill.',
+      see:'A letter from Hampstead, miles from Soho. A widow, Susannah Eley, liked the taste of Broad Street water and had it carted to her. She died of cholera on 2 September. No one else nearby fell ill.'},
+    pamphlet:{t:'The Miasma Pamphlet',d:'Lethe is pushing the bad-air theory to bury Snow\'s findings. The paper is from the 23rd century.',
+      see:'A pamphlet: "CHOLERA RIDES THE NIGHT AIR. SHUT YOUR WINDOWS. THE WATER IS PURE." It is printed on a polymer paper that will not exist for another three hundred years.'}
+  },
+  talk:{
+    snow(g){
+      if(!g.f.met)return[[
+        ['snow','You are not from the parish. Good. The parish is not listening.'],
+        ['snow','Cholera is not carried on the air. If it were, why would it gather around one street like iron filings around a magnet?'],
+        ['snow','I had it all on a map. Every death, a mark. Last night a man in a grey hood took it from my desk.'],
+        ['snow','Find my map. Ask the brewery and the workhouse how their people fared. Then set the evidence out on the board beside my door.']
+      ],()=>{g.f.met=1}];
+      if(!g.f.deduced)return[[['snow','The map, the brewery, the workhouse. The facts will speak if we let them. The board is right here when you are ready.']]];
+      if(!g.f.order)return[[
+        ['snow','Then you see it too. The Broad Street pump.'],
+        ['snow','The Board of Guardians has agreed to remove the handle. But those hooded men are standing around the pump as if they own it.'],
+        ['snow','Get to the pump and take the handle off. I will keep the Guardians talking.']
+      ],()=>{g.f.order=1}];
+      if(!g.f.restored)return[[['snow','The pump, on Broad Street. Take the handle off before anyone else draws a bucket.']]];
+      return[[['snow','The handle is off. Now we count, and we write everything down. That is how this ends.']]];
+    },
+    master(g){
+      if(!g.found.has('master'))return[[
+        ['master','Poland Street Workhouse. Five hundred and thirty-five souls under this roof, packed tight as herring.'],
+        ['master','If bad air spread cholera, we would have lost half of them. We have buried five.'],
+        ['master','We draw our water from our own well in the yard. Never touch the street pumps.']
+      ],()=>g.addClue('master')];
+      return[[['master','Our own well. Five deaths out of five hundred. Make of it what you will.']]];
+    },
+    foreman(g){
+      if(!g.found.has('foreman'))return[[
+        ['foreman','Seventy men work this brewery, right here on Broad Street. Not one of them has died.'],
+        ['foreman','The lads get a beer allowance, and the brewery has its own deep well. Nobody here drinks from the street pump.']
+      ],()=>g.addClue('foreman')];
+      return[[['foreman','Beer and our own well. Seventy men, not a single grave.']]];
+    },
+    white(g){
+      return[[
+        ['white','Reverend Henry Whitehead, curate of St Luke\'s. I knew most of the dead by name.'],
+        ['white','I thought Dr. Snow was wrong. Divine judgement, bad air, I did not know what to think.'],
+        ['white','But the families I visit all say the same thing. They sent the children to Broad Street for water, because it tasted the best.'],
+        ['white','Someone dropped a letter by the far corner of the street, near the east end. A Hampstead postmark.']
+      ]];
+    }
+  },
+  use:{
+    pump(g){
+      if(!g.f.deduced)return[[['note','The Broad Street pump. The water tastes clean and cold. You need proof before anyone will touch it.']]];
+      if(!g.f.order)return[[['note','Speak to Dr. Snow first. Without the Board\'s order, the handle goes straight back on.']]];
+      if(!g.f.restored)return[[
+        ['note','You knock out the pin and lift the iron handle free. The pump falls silent.'],
+        ['note','In 2249, a grey shelf of medical texts flushes back to colour. The gate on the east street wakes.']
+      ],()=>{g.f.restored=1}];
+      return[[['note','A pump with no handle. The most important piece of public health equipment in London.']]];
+    }
+  },
+  targetLabel:{pump:'Broad Street pump'},
+  deduction:[
+    {q:'Where is the source of the outbreak?',o:['Foul air from the sewers','The Rupert Street pump','The Broad Street pump','The Lion Brewery'],a:2,
+     why:'Deaths cluster around the Broad Street pump and fall away the further a house is from it.'},
+    {q:'The brewery and the workhouse sit inside the outbreak, yet almost no one there died. Why?',o:['Their windows were kept shut','They drew water from their own wells','Their people were stronger','They were upwind of the sewers'],a:1,
+     why:'Same air, different water. The two places that never used the pump were spared.'},
+    {q:'The Hampstead widow lived miles away, but died anyway. What links her to the outbreak?',o:['She drank water carted from Broad Street','She visited Soho that week','The air drifted from Soho to Hampstead','Pure coincidence'],a:0,
+     why:'Distance from Soho didn\'t matter. Drinking Broad Street water did.'},
+    {q:'What is the fastest way to stop the deaths?',o:['Burn tar to clean the air','Close the brewery','Quarantine the workhouse','Remove the pump handle'],a:3,
+     why:'On 8 September 1854 the handle was removed. The outbreak was already slowing, but Snow\'s evidence founded modern epidemiology.'}
+  ],
+  objectives(g){return[
+    {t:'Find Dr. John Snow on Broad Street',done:!!g.f.met},
+    {t:'Gather the evidence ('+g.found.size+'/5)',done:g.found.size>=5},
+    {t:'Solve the Deduction Board by Snow\'s door',done:!!g.f.deduced},
+    {t:'Get the Board\'s order from Snow',done:!!g.f.order},
+    {t:'Remove the Broad Street pump handle',done:!!g.f.restored},
+    {t:'Return through the Time Gate',done:false}]},
+  gate(g){return g.f.restored?null:'The gate will not open until the pump is dealt with.'}
+},
+/* ================= PADUA ================= */
+{
+  id:'padua', title:'The Wandering Stars', year:'1610 CE', place:'Padua, Republic of Venice', theme:'padua', drift:0.05, page:'padua',
+  card:{kicker:'Case 01 · Chapter III',
+    text:['January. Galileo Galilei, professor of mathematics, has built a telescope that magnifies twenty times. Each clear night he points it at Jupiter and records what he sees.',
+          'Lethe has swapped his lens for smoked glass and scattered his observation notes through the house. Without these nights, nobody shows that not everything circles the Earth, and the road to the stars is never taken.'],
+    note:'Gate dilation: every minute here costs about 3 years in 2249.'},
+  start:[2,11],
+  build(){const a=G(40,24,'#');
+    R(a,1,1,12,8,'.');R(a,1,1,4,1,'B');R(a,7,1,4,1,'B');R(a,5,5,2,1,'=');R(a,6,9,1,1,'.');
+    R(a,1,10,26,3,'.');
+    R(a,1,14,12,8,'.');R(a,6,13,1,1,'.');P(a,[[3,16],[4,16],[8,16],[9,16]],'=');
+    R(a,15,1,11,8,'.');R(a,16,1,4,1,'B');R(a,22,7,3,1,'=');R(a,20,9,1,1,'.');
+    R(a,15,14,11,8,'g');R(a,20,13,1,1,'g');P(a,[[18,17],[22,17],[18,19],[22,19]],'T');
+    R(a,28,1,8,21,',');R(a,27,11,1,1,'.');R(a,36,1,3,22,'v');
+    return a},
+  ents:[
+    {k:'npc',id:'galileo',x:31,y:6},
+    {k:'npc',id:'castelli',x:14,y:11},
+    {k:'board',x:10,y:4},
+    {k:'target',id:'telescope',x:34,y:4,sprite:'telescope',solid:1},
+    {k:'clue',id:'jan7',x:3,y:7,sprite:'note'},
+    {k:'clue',id:'jan8',x:24,y:2,sprite:'note'},
+    {k:'clue',id:'jan13',x:20,y:18,sprite:'note'},
+    {k:'clue',id:'lens',x:2,y:21,sprite:'lens'},
+    {k:'warden',x:2,y:18,path:[[0,0],[9,0]]},
+    {k:'warden',x:11,y:15,path:[[0,0],[0,6]]},
+    {k:'warden',x:16,y:15,path:[[0,0],[8,0],[8,5],[0,5]]},
+    {k:'gate',x:31.5,y:18},
+    {k:'light',x:3,y:3,kind:'candle'},{k:'light',x:12,y:11,kind:'torch'},{k:'light',x:22,y:3,kind:'candle'},{k:'light',x:6,y:19,kind:'torch'},
+    {k:'light',x:29,y:2,kind:'brazier'},{k:'light',x:29,y:20,kind:'brazier'},{k:'light',x:25,y:21,kind:'torch'},{k:'light',x:4,y:11,kind:'torch'}
+  ],
+  clues:{
+    jan7:{t:'Note: 7 January 1610',d:'Jupiter with three small stars in a straight line: two to the east, one to the west.',
+      see:'Galileo\'s hand: "7 January. Jupiter, and beside it three small stars in a straight line. Two to the east, one to the west."'},
+    jan8:{t:'Note: 8 January 1610',d:'All three stars now west of Jupiter. If they were fixed stars, Jupiter would have to be moving the wrong way.',
+      see:'"8 January. All three now stand to the west of Jupiter, closer together than before." Beneath it, underlined: "How can Jupiter have moved east, against its course?"'},
+    jan13:{t:'Note: 13 January 1610',d:'For the first time, four small stars. One had been hidden behind or in front of Jupiter until now.',
+      see:'"13 January. For the first time, FOUR small stars." A sketch shows them strung along a line through the planet.'},
+    lens:{t:'The True Lens',d:'Galileo\'s ground lens, marked "G.G. 20x". The glass in the telescope is Lethe\'s smoked swap.',
+      see:'A lens wrapped in velvet, scratched with "G.G. 20x". The glass in the telescope right now is smoked and faintly teal. Lethe swapped them.'},
+    castelli:{t:'Castelli\'s Testimony',d:'Jupiter drifts slowly across the sky, but the small stars stay with it, hopping from one side to the other.',see:''}
+  },
+  talk:{
+    galileo(g){
+      if(!g.f.met)return[[
+        ['galileo','Who climbs onto my roof in January? If you are from the Holy Office, you are early by some years.'],
+        ['rhea','I\'m here to help with Jupiter.'],
+        ['galileo','Then you are welcome. Six nights ago I saw three little stars beside Jupiter, in a perfect line. The next night they had moved.'],
+        ['galileo','Fixed stars do not move. But tonight my telescope shows nothing but smoke, and my notes are gone from my desk.'],
+        ['galileo','Find my notes for the seventh, the eighth and the thirteenth. Find my true lens. Then work out what these little stars are, on the board in my study.']
+      ],()=>{g.f.met=1}];
+      if(!g.f.deduced)return[[['galileo','Three notes, one lens. My student Castelli has watched with me. Ask him. The board is in my study.']]];
+      if(!g.f.restored)return[[['galileo','You have it? Then fit the true lens into the telescope, and we shall look together.']]];
+      return[[['galileo','Four moons around Jupiter. I will publish by March and call them the Medicean Stars. Let the world argue.']]];
+    },
+    castelli(g){
+      if(!g.found.has('castelli'))return[[
+        ['castelli','Benedetto Castelli, student of the Maestro.'],
+        ['castelli','Each night he sketches Jupiter and the little stars. Jupiter drifts slowly against the sky, but the little stars stay with it.'],
+        ['castelli','They hop from one side to the other, as if dancing around it. Never far away.'],
+        ['castelli','Hooded men took the Maestro\'s lens case into the workshop. They walk in circles out there in the garden too.']
+      ],()=>g.addClue('castelli')];
+      return[[['castelli','They stay with Jupiter, always. That is what I cannot stop thinking about.']]];
+    }
+  },
+  use:{
+    telescope(g){
+      if(!g.f.deduced)return[[['note','Galileo\'s telescope. Through the eyepiece: grey smoke and a faint teal shimmer. Not much use until you know what you are looking for.']]];
+      if(!g.f.restored)return[[
+        ['note','You unscrew the smoked glass and seat the true lens. The tube clicks into focus.'],
+        ['note','Jupiter, a small bright disc. Strung along a line through it, four tiny points of light.'],
+        ['galileo','Four. They circle Jupiter, not the Earth. Then the Earth need not be the centre of everything.'],
+        ['note','In 2249, the last grey shelf floods back to colour. The gate on the terrace wakes.']
+      ],()=>{g.f.restored=1}];
+      return[[['note','Four moons, steady as clockwork around Jupiter.']]];
+    }
+  },
+  targetLabel:{telescope:'Telescope'},
+  deduction:[
+    {q:'Fixed stars keep their positions night after night. These small stars change sides around Jupiter. What does that mean?',
+     o:['They are fixed stars and Jupiter jumps around','The telescope is distorting the image','They are moving around Jupiter','They are clouds in Earth\'s air'],a:2,
+     why:'They travel with Jupiter and swap sides of it. That is the motion of things in orbit.'},
+    {q:'On 13 January a fourth star appeared. Where was it before?',
+     o:['Hidden behind or in front of Jupiter along its orbit','It was born that night','It drifted in from another planet','Galileo miscounted'],a:0,
+     why:'Seen edge-on, an orbiting moon disappears when it passes behind the planet or in front of its glare.'},
+    {q:'How many companions does Jupiter have in Galileo\'s observations?',
+     o:['One','Three','Four','Seven'],a:2,
+     why:'Io, Europa, Ganymede and Callisto. Today we call them the Galilean moons.'},
+    {q:'What do these moons overturn?',
+     o:['That Jupiter is a planet','That every body in the heavens circles the Earth','That the Moon has craters','That stars are hot'],a:1,
+     why:'Here was something that plainly orbited another world. The Earth-centred cosmos had a crack in it.'}
+  ],
+  objectives(g){return[
+    {t:'Meet Galileo on the roof terrace',done:!!g.f.met},
+    {t:'Gather the evidence ('+g.found.size+'/5)',done:g.found.size>=5},
+    {t:'Solve the Deduction Board in the study',done:!!g.f.deduced},
+    {t:'Fit the true lens to the telescope',done:!!g.f.restored},
+    {t:'Return through the Time Gate',done:false}]},
+  gate(g){return g.f.restored?null:'The gate will not open until the telescope is set right.'}
+},
+/* ================= FINALE ================= */
+{
+  id:'finale', title:'The Fold', year:'2249 CE', place:'Beyond the Gate', theme:'tess', drift:0.08, final:1,
+  card:{kicker:'Case 01 · Finale',
+    text:['All three pages are whole again. But Lethe\'s core has followed you home, into the fold between the shelves where time folds over itself.',
+          'Here the shelves hold gravity like ink. Lock the three restored pages in the order history wrote them, and the library will hold them forever. Then shut Lethe down.'],
+    note:'Fold dilation: every minute here costs about 5 years outside.'},
+  start:[2,22],
+  build(){const a=G(40,24,'.');
+    for(let by=3;by<21;by+=5)for(let bx=3;bx<37;bx+=5){if(bx>=13&&bx<=24&&by>=8&&by<=14)continue;R(a,bx,by,2,2,'B')}
+    R(a,14,8,13,8,',');
+    return a},
+  ents:[
+    {k:'npc',id:'imaraEcho',x:4,y:21},
+    {k:'pedestal',slot:0,x:17,y:14,solid:1},
+    {k:'pedestal',slot:1,x:20,y:14,solid:1},
+    {k:'pedestal',slot:2,x:23,y:14,solid:1},
+    {k:'core',x:20,y:10,solid:1},
+    {k:'warden',x:13,y:7,path:[[0,0],[14,0],[14,9],[0,9]]},
+    {k:'warden',x:5,y:1,path:[[0,0],[28,0]]},
+    {k:'warden',x:37,y:2,path:[[0,0],[0,18]]},
+    {k:'light',x:6,y:6,kind:'holo'},{k:'light',x:31,y:6,kind:'holo'},{k:'light',x:6,y:16,kind:'holo'},{k:'light',x:31,y:16,kind:'holo'},
+    {k:'light',x:11,y:21,kind:'holo'},{k:'light',x:26,y:21,kind:'holo'},{k:'light',x:20,y:2,kind:'holo'}
+  ],
+  pages:[{id:'alex',name:'The Measure of the Earth',place:'Alexandria'},{id:'padua',name:'The Moons of Jupiter',place:'Padua'},{id:'london',name:'The Ghost Map',place:'Soho, London'}],
+  clues:{},
+  talk:{
+    imaraEcho(g){
+      return[[
+        ['imaraEcho','Solen, can you hear me? You are inside the library\'s fold. I can only reach you through the shelves.'],
+        ['imaraEcho','There are three pedestals in front of Lethe\'s core. Fill them in order, starting with I: the earliest discovery first, then the next, then the last.'],
+        ['imaraEcho','Get the order wrong and the fold will throw the page back at you. It will hurt.'],
+        ['imaraEcho','Once all three are locked, the core loses its shield. Talk to it. Lethe always wants the last word.'],
+        ['imaraEcho','Its Echoes are everywhere in there. Stay out of their sight.']
+      ],()=>{g.f.met=1}];
+    }
+  },
+  objectives(g){const n=g.f.placed||0;return[
+    {t:'Listen for Imara',done:!!g.f.met},
+    {t:'Lock the pages in history\'s order ('+n+'/3)',done:n>=3},
+    {t:'Confront Lethe\'s core',done:!!g.f.won}]},
+  gate(){return null}
+}
+];
+const ROMAN=['I','II','III'];
+/*DATA-END*/
+</script>
+
+<script>
+(()=>{
+'use strict';
+const $=s=>document.querySelector(s);
+const VW=480,VH=270,TS=16,PI=Math.PI;
+const cv=$('#cv'),ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
+const screenEl=$('#screen'),ov=$('#ov'),hud=$('#hud');
+function cnv(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+const lightC=cnv(VW,VH),lx=lightC.getContext('2d');
+
+/* ---------- colour + rng ---------- */
+function rgbOf(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+function sh(h,a){const c=rgbOf(h);return 'rgb('+c.map(v=>Math.max(0,Math.min(255,Math.round(v+a*255)))).join(',')+')'}
+function mkRng(s){s=s>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+function angDiff(a,b){let d=a-b;while(d>PI)d-=2*PI;while(d<-PI)d+=2*PI;return d}
+
+/* ---------- themes ---------- */
+const THEMES={
+  archive:{floor:'#3b3229',floor2:'#192124',wall:'#4a4038',face:'#2d2722',fT:'slab',f2T:'holo',ambient:.66,books:['#7a5a3a','#5a6a5a','#6a4a4a','#4a5060','#8a7a5a','#3f5a5a'],blank:.4,glow:'#74cbbb',col:'#5a5048',brick:[8,4],dust:'214,180,122',drone:55},
+  alex:{floor:'#b39466',floor2:'#c4a46d',wall:'#c9b388',face:'#977f56',fT:'paver',f2T:'sand',ambient:.4,scrolls:1,col:'#d8c49a',brick:[8,8],dust:'230,205,150',palm:1,drone:65.4},
+  london:{floor:'#3a393c',floor2:'#36302a',wall:'#5a2f27',face:'#3c1e18',fT:'cobble',f2T:'mud',ambient:.74,books:['#5a3a2a','#3a3a4a'],col:'#555',brick:[6,3],fog:1,drone:49},
+  padua:{floor:'#563823',floor2:'#6a5140',wall:'#86573c',face:'#5a3826',fT:'wood',f2T:'terrace',ambient:.74,books:['#7a3a2a','#5a4a2a','#3a4a3a','#6a5a3a'],col:'#8a7a6a',brick:[16,5],grass:'#34452a',drone:58},
+  tess:{floor:'#14181b',floor2:'#0f1618',wall:'#2a3236',face:'#1a1f22',fT:'void',f2T:'holo',ambient:.52,books:['#2a4a48','#3a3f44','#4a5a58','#74cbbb'],blank:.15,glow:'#74cbbb',col:'#444',brick:[8,4],tess:1,drone:41}
+};
+
+/* ---------- tile atlas ---------- */
+function tile(fn){const c=cnv(TS,TS);const x=c.getContext('2d');fn(x);return c}
+function genFloor(type,base,seed,th){const r=mkRng(seed);return tile(x=>{
+  const dot=(X,Y,c)=>{x.fillStyle=c;x.fillRect(X,Y,1,1)};
+  const noise=(b,v)=>{for(let j=0;j<TS;j++)for(let i=0;i<TS;i++)dot(i,j,sh(b,(r()-.5)*v))};
+  if(type==='slab'||type==='paver'||type==='terrace'){
+    noise(base,.06);
+    for(let i=0;i<TS;i++){dot(i,0,sh(base,-.11));dot(i,8,sh(base,-.11));dot(i,1,sh(base,.03));dot(i,9,sh(base,.03))}
+    for(let j=0;j<8;j++)dot(0,j,sh(base,-.11));
+    for(let j=8;j<16;j++)dot(type==='terrace'?0:8,j,sh(base,-.11));
+    if(type==='terrace')for(let j=0;j<16;j++)dot(8,j,sh(base,-.11));
+    if(r()<.45){let cx=2+(r()*11|0),cy=2+(r()*11|0);for(let k=0;k<5;k++){dot(cx,cy,sh(base,-.15));cx+=r()<.6?1:0;cy+=r()<.5?1:0}}
+  }else if(type==='sand'){
+    noise(base,.05);
+    for(let k=0;k<3;k++){const y0=2+(r()*12|0);for(let i=0;i<TS;i++){const y=y0+Math.round(Math.sin((i+seed)*.6));if(y>=0&&y<16)dot(i,y,sh(base,.05))}}
+    for(let k=0;k<5;k++)dot(r()*16|0,r()*16|0,sh(base,-.12));
+  }else if(type==='cobble'){
+    x.fillStyle=sh(base,-.13);x.fillRect(0,0,16,16);
+    for(let gy=0;gy<4;gy++)for(let gx=0;gx<3;gx++){
+      const ox=gx*6-(gy%2?3:0)+(r()*2|0),oy=gy*4,c=(r()-.5)*.1;
+      for(let j=0;j<3;j++)for(let i=0;i<5;i++){if((i===0||i===4)&&(j===0||j===2))continue;const X=ox+i,Y=oy+j;if(X>=0&&X<16)dot(X,Y,sh(base,c+(r()-.5)*.04+(j===0?.04:0)))}
+    }
+  }else if(type==='mud'){
+    noise(base,.06);
+    if(r()<.5){const px=2+(r()*10|0),py=3+(r()*10|0);x.fillStyle=sh(base,-.1);x.fillRect(px,py,4,2);dot(px+1,py,sh(base,.08))}
+  }else if(type==='wood'){
+    for(let row=0;row<4;row++){const b=(r()-.5)*.06;const seam=r()*16|0;
+      for(let j=0;j<4;j++)for(let i=0;i<16;i++){let c=b+(r()-.5)*.03;if(j===3)c-=.1;if(j===0)c+=.03;if(i===seam)c-=.09;dot(i,row*4+j,sh(base,c))}
+      if(r()<.5)dot(r()*16|0,row*4+1,sh(base,-.12))}
+  }else if(type==='holo'){
+    noise(base,.03);
+    x.fillStyle='rgba(116,203,187,.10)';x.fillRect(0,0,16,1);x.fillRect(0,0,1,16);
+    x.fillStyle='rgba(116,203,187,.05)';x.fillRect(0,8,16,1);x.fillRect(8,0,1,16);
+    if(r()<.35){x.fillStyle='rgba(116,203,187,.35)';x.fillRect(8,8,1,1)}
+    if(r()<.25){x.fillStyle='rgba(116,203,187,.18)';const yy=r()*16|0;x.fillRect(0,yy,(r()*10|0)+4,1)}
+  }else if(type==='void'){
+    noise(base,.02);
+    for(let k=0;k<2;k++)if(r()<.5){x.fillStyle='rgba(116,203,187,.22)';x.fillRect(r()*16|0,r()*16|0,1,1)}
+  }else if(type==='grass'){
+    noise(base,.06);
+    for(let k=0;k<10;k++){const X=r()*16|0,Y=r()*15|0;dot(X,Y,sh(base,.08));dot(X,Y+1,sh(base,-.05))}
+  }
+})}
+function buildAtlas(th){
+  const A={};const s=th.drone*100|0;
+  A.floor=[0,1,2,3].map(i=>genFloor(th.fT,th.floor,s+i*17,th));
+  A.floor2=[0,1,2,3].map(i=>genFloor(th.f2T,th.floor2,s+i*31+5,th));
+  A.grass=[0,1,2,3].map(i=>genFloor('grass',th.grass||'#34452a',s+i*7+3,th));
+  const r=mkRng(s+99);
+  A.wallTop=tile(x=>{for(let j=0;j<16;j++)for(let i=0;i<16;i++){let c=(r()-.5)*.04;if(j<1)c+=.06;if(j>14)c-=.07;x.fillStyle=sh(th.wall,c-.03);x.fillRect(i,j,1,1)}
+    if(th.glow&&!th.tess){x.fillStyle='rgba(116,203,187,.12)';x.fillRect(0,7,16,1)}});
+  A.wallFace=tile(x=>{const [bw,bh]=th.brick;for(let j=0;j<16;j++){const row=Math.floor(j/bh),off=(row%2)*(bw/2);
+      for(let i=0;i<16;i++){let c=(r()-.5)*.04;const mort=(j%bh===bh-1)||((i+off)%bw===0);if(mort)c-=.12;if(j>13)c-=.12;if(j===0)c+=.06;x.fillStyle=sh(th.face,c);x.fillRect(i,j,1,1)}}
+    if(th.glow){x.fillStyle='rgba(116,203,187,.28)';x.fillRect(2,9,9,1);x.fillRect(10,9,1,3);x.fillStyle='rgba(116,203,187,.5)';x.fillRect(10,12,1,1)}});
+  A.shelf=[0,1].map(v=>tile(x=>{
+    if(th.scrolls){x.fillStyle='#4a3420';x.fillRect(0,0,16,16);
+      for(let gy=0;gy<3;gy++)for(let gx=0;gx<4;gx++){const X=gx*4,Y=gy*5+1;x.fillStyle='#2a1c10';x.fillRect(X,Y,4,4);if(r()<.85){x.fillStyle=sh('#e0cfa0',(r()-.5)*.12);x.fillRect(X+1,Y+1,2,2);x.fillStyle='#8a7350';x.fillRect(X+1,Y+2,1,1)}}
+      x.fillStyle='#6b4a2a';x.fillRect(0,15,16,1);return}
+    x.fillStyle=th.tess?'#1a2226':'#2e2117';x.fillRect(0,0,16,16);
+    x.fillStyle=th.tess?'#2a3438':'#4a3424';x.fillRect(0,0,16,1);x.fillRect(0,0,1,16);x.fillRect(15,0,1,16);
+    for(const sy of [1,6,11]){let i=1;while(i<15){const w=r()<.7?1:2,h=3+(r()<.5?1:0);let c=th.books[r()*th.books.length|0];
+        if(th.blank&&r()<th.blank)c='#4a4d50';x.fillStyle=c;x.fillRect(i,sy+4-h,w,h);if(th.glow&&r()<.08){x.fillStyle='rgba(116,203,187,.8)';x.fillRect(i,sy+4-h,1,1)}i+=w}
+      x.fillStyle=th.tess?'#2a3438':'#4a3424';x.fillRect(1,sy+4,14,1)}
+  }));
+  A.col=[0,1,2,3].map(i=>{const c=cnv(16,16),x=c.getContext('2d');x.drawImage(A.floor[i],0,0);
+    for(let j=0;j<16;j++)for(let k=0;k<16;k++){const dx=k-7.5,dy=j-7.5,d=Math.hypot(dx,dy);if(d<=6.4){let s=-(dx+dy)*.012+(d>5.4?-.1:0);x.fillStyle=sh(th.col,s);x.fillRect(k,j,1,1)}}
+    x.fillStyle='rgba(0,0,0,.25)';x.fillRect(4,14,10,2);return c});
+  A.table=[0,1,2,3].map(i=>{const c=cnv(16,16),x=c.getContext('2d');x.drawImage(i<2?A.floor[i]:A.floor[i],0,0);
+    x.fillStyle='rgba(0,0,0,.3)';x.fillRect(1,12,15,3);x.fillStyle='#5a3e26';x.fillRect(0,3,16,10);x.fillStyle='#6e4c2e';x.fillRect(0,3,16,2);
+    x.fillStyle='#3e2a18';x.fillRect(0,12,16,1);x.fillStyle=th.scrolls?'#e0cfa0':'#d8d0bc';x.fillRect(3+i,6,5,4);x.fillStyle='#8a8070';x.fillRect(4+i,7,3,1);x.fillRect(4+i,8,2,1);return c});
+  A.rubble=[0,1,2,3].map(i=>{const c=cnv(16,16),x=c.getContext('2d');x.drawImage(A.floor2[i],0,0);const rr=mkRng(s+i*3);
+    for(let k=0;k<4;k++){const X=rr()*12|0,Y=rr()*12|0,w=3+(rr()*3|0),h=2+(rr()*3|0);x.fillStyle='rgba(0,0,0,.3)';x.fillRect(X+1,Y+1,w,h);x.fillStyle=sh(th.wall,(rr()-.5)*.1);x.fillRect(X,Y,w,h);x.fillStyle=sh(th.wall,.07);x.fillRect(X,Y,w,1)}return c});
+  A.tree=[0,1].map(i=>{const c=cnv(16,16),x=c.getContext('2d');x.drawImage(th.grass?A.grass[i]:A.floor2[i],0,0);const rr=mkRng(s+i*11);
+    x.fillStyle='rgba(0,0,0,.3)';x.fillRect(3,11,12,4);
+    if(th.palm){x.fillStyle='#6a4a2a';x.fillRect(7,8,2,7);const fr=[[0,-1],[1,-1],[1,0],[1,1],[-1,1],[-1,0],[-1,-1],[0,1]];
+      for(const [dx,dy] of fr)for(let k=1;k<7;k++){const X=8+dx*k,Y=6+dy*k*.7+(k>3?1:0);x.fillStyle=k%2?'#4a6a2a':'#3a5a22';x.fillRect(Math.round(X),Math.round(Y),1,1)}
+      x.fillStyle='#5a7a32';x.fillRect(7,5,2,2)}
+    else{for(let j=0;j<16;j++)for(let k=0;k<16;k++){const d=Math.hypot(k-8,j-7);if(d<6.5){x.fillStyle=sh('#2e4224',-(k+j-15)*.01+(rr()-.5)*.06+(d>5.5?-.06:0));x.fillRect(k,j,1,1)}}}
+    return c});
+  A.water=[0,1].map(f=>tile(x=>{const rr=mkRng(s+f);for(let j=0;j<16;j++)for(let i=0;i<16;i++){x.fillStyle=sh('#1b3142',(rr()-.5)*.04);x.fillRect(i,j,1,1)}
+    x.fillStyle='rgba(180,210,220,.18)';for(let k=0;k<3;k++){const y=(k*5+f*2)%16;x.fillRect((k*6+f*3)%12,y,4,1)}}));
+  A.void=[0,1,2].map(i=>tile(x=>{const rr=mkRng(s+i*5+1);x.fillStyle='#070912';x.fillRect(0,0,16,16);for(let k=0;k<4;k++){x.fillStyle=rr()<.3?'#e8e4d8':'#5a6278';x.fillRect(rr()*16|0,rr()*16|0,1,1)}}));
+  return A;
+}
+
+/* ---------- character sprites ---------- */
+const BODY={
+  down:["...hhhh...","..hhhhhh..","..hhsshh..","..sesses..","..ssssss..","...ssss...","..cccccc..",".sccttccs.",".sccccccs.",".sbbbbbbs.","..cccccc.."],
+  up:  ["...hhhh...","..hhhhhh..","..hhhhhh..","..hhhhhh..","..shhhhs..","...ssss...","..cccccc..",".sccccccs.",".sccccccs.",".sbbbbbbs.","..cccccc.."],
+  side:["...hhhh...","..hhhhhh..","..hhhsss..","..hhsses..","..hhssss..","...sss....","...cccc...","...ccts...","...cccs...","...bbbb...","...cccc..."]};
+const LEGS={down:[["..pp..pp..","..pp..pp..","..kk..kk.."],["..pp..pp..",".pp....pp.",".kk....kk."]],
+  side:[["...pp.....","...pp.....","...kkk...."],["..p..p....",".p....p...","kk....kk.."]]};
+const ROBE={down:[["..cccccc..","..cccccc..","..kk..kk.."],["..cccccc..",".cccccccc.",".kk....kk."]],
+  side:[["...cccc...","...ccccc..","...kk.k..."],["..cccccc..","..ccccccc.","..kk...kk."]]};
+const PALS={
+  player:{h:'#2e383d',s:'#c99a74',e:'#1a1a1a',c:'#2a2f33',t:'#74cbbb',b:'#6b4a2a',p:'#1f2327',k:'#121416'},
+  imara:{h:'#1a1412',s:'#7a4e33',e:'#111',c:'#d9d2c0',t:'#74cbbb',b:'#9a9488',p:'#3a4048',k:'#222'},
+  erat:{h:'#d8d4cc',s:'#b98a62',e:'#222',c:'#e6dabd',t:'#8a2a2a',b:'#8a6a3a',k:'#6a4a2a',robe:1},
+  hori:{h:'#1a1410',s:'#8a5a3a',e:'#111',c:'#c8a060',t:'#2a5a7a',b:'#6a4a2a',k:'#4a3020',robe:1},
+  ankhu:{h:'#2a1a10',s:'#9a6a44',e:'#111',c:'#e0d2b0',t:'#6b4a2a',b:'#6b4a2a',p:'#9a6a44',k:'#5a3a20'},
+  snow:{h:'#5a4030',s:'#e0b896',e:'#222',c:'#26262c',t:'#e8e4dc',b:'#26262c',p:'#26262c',k:'#111'},
+  master:{h:'#7a7068',s:'#d8b090',e:'#222',c:'#4a3a2a',t:'#c8c0b0',b:'#2a2018',p:'#3a3028',k:'#151210'},
+  foreman:{h:'#8a4a2a',s:'#e0a888',e:'#222',c:'#5a4a3a',t:'#b8a888',b:'#b8a888',p:'#3a3228',k:'#151210'},
+  white:{h:'#3a2a20',s:'#e8c0a0',e:'#222',c:'#141418',t:'#f0f0f0',b:'#141418',p:'#141418',k:'#0a0a0c'},
+  galileo:{h:'#8a5236',s:'#d8a880',e:'#222',c:'#3a2018',t:'#c8a050',b:'#1e120c',k:'#1e120c',robe:1},
+  castelli:{h:'#2a1a12',s:'#d8b090',e:'#222',c:'#1c1c24',t:'#888',b:'#111',k:'#111',robe:1},
+  warden:{h:'#1a1c21',s:'#0d0e11',e:'#7ff0dc',c:'#22252b',t:'#74cbbb',b:'#2f3339',p:'#1a1c21',k:'#0d0e11',robe:1}
+};
+function buildChar(pal){const out={};
+  for(const d of ['down','up','side']){out[d]=[0,1].map(f=>{
+    const legs=(pal.robe?ROBE:LEGS)[d==='side'?'side':'down'][f];const rows=BODY[d].concat(legs);
+    const c=cnv(10,14),x=c.getContext('2d');
+    rows.forEach((row,j)=>{for(let i=0;i<10;i++){const ch=row[i];if(ch==='.')continue;const col=pal[ch]||pal.c;x.fillStyle=col;x.fillRect(i,j,1,1)}});return c})}
+  return out}
+const SPR={};for(const k in PALS)SPR[k]=buildChar(PALS[k]);
+
+/* ---------- audio ---------- */
+const AU={ctx:null,on:true,amb:null};
+function audioInit(){if(AU.ctx)return;try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;AU.ctx=new C();AU.master=AU.ctx.createGain();AU.master.gain.value=.5;AU.master.connect(AU.ctx.destination);if(g&&mode==='play')startAmb(THEMES[g.ch.theme].drone)}catch(e){AU.ctx=null}}
+function tone(f,d=.1,type='square',v=.06,slide=0,delay=0){if(!AU.ctx||!AU.on)return;const t=AU.ctx.currentTime+delay;const o=AU.ctx.createOscillator(),gn=AU.ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,f+slide),t+d);gn.gain.setValueAtTime(v,t);gn.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(gn);gn.connect(AU.master);o.start(t);o.stop(t+d+.05)}
+function hiss(d=.25,v=.1){if(!AU.ctx||!AU.on)return;const n=AU.ctx.sampleRate*d|0,b=AU.ctx.createBuffer(1,n,AU.ctx.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=(Math.random()*2-1)*(1-i/n);const s=AU.ctx.createBufferSource(),f=AU.ctx.createBiquadFilter(),gn=AU.ctx.createGain();f.type='bandpass';f.frequency.value=1200;gn.gain.value=v;s.buffer=b;s.connect(f);f.connect(gn);gn.connect(AU.master);s.start()}
+const SFX={
+  blip:()=>tone(480+Math.random()*60,.03,'square',.02),
+  sel:()=>tone(660,.04,'square',.03),
+  clue:()=>{tone(660,.09,'triangle',.06);tone(880,.09,'triangle',.06,0,.09);tone(1320,.18,'triangle',.05,0,.18)},
+  alert:()=>tone(330,.18,'sawtooth',.05,140),
+  caught:()=>{tone(160,.6,'sawtooth',.09,-90);hiss(.4,.08)},
+  take:()=>{hiss(.3,.14);tone(420,.25,'triangle',.06,-300)},
+  warp:()=>{tone(70,1.6,'sine',.14,700);tone(140,1.6,'triangle',.05,900)},
+  right:()=>{tone(523,.1,'triangle',.06);tone(659,.1,'triangle',.06,0,.1);tone(784,.22,'triangle',.06,0,.2)},
+  wrong:()=>tone(130,.32,'square',.05,-30),
+  sense:()=>tone(220,.5,'sine',.07,440),
+  deny:()=>tone(200,.12,'square',.04)
+};
+function startAmb(f){if(!AU.ctx)return;stopAmb();if(!AU.on)return;const t=AU.ctx.currentTime;const gn=AU.ctx.createGain();gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(.05,t+2);
+  const flt=AU.ctx.createBiquadFilter();flt.type='lowpass';flt.frequency.value=380;const o1=AU.ctx.createOscillator(),o2=AU.ctx.createOscillator(),o3=AU.ctx.createOscillator();
+  o1.type='sawtooth';o1.frequency.value=f;o2.type='sawtooth';o2.frequency.value=f*1.006;o3.type='sine';o3.frequency.value=f*1.5;
+  const lfo=AU.ctx.createOscillator(),lg=AU.ctx.createGain();lfo.frequency.value=.07;lg.gain.value=160;lfo.connect(lg);lg.connect(flt.frequency);
+  [o1,o2,o3].forEach(o=>o.connect(flt));flt.connect(gn);gn.connect(AU.master);[o1,o2,o3,lfo].forEach(o=>o.start());AU.amb={nodes:[o1,o2,o3,lfo],gn}}
+function stopAmb(){if(!AU.amb||!AU.ctx)return;const a=AU.amb;AU.amb=null;const t=AU.ctx.currentTime;a.gn.gain.cancelScheduledValues(t);a.gn.gain.setValueAtTime(a.gn.gain.value,t);a.gn.gain.linearRampToValueAtTime(0,t+.6);setTimeout(()=>a.nodes.forEach(o=>{try{o.stop()}catch(e){}}),800)}
+
+/* ---------- storage ---------- */
+function loadSave(){try{const s=JSON.parse(localStorage.getItem('chronos-archive-save')||'null');return s&&typeof s.ci==='number'?s:null}catch(e){return null}}
+function writeSave(o){try{localStorage.setItem('chronos-archive-save',JSON.stringify(o))}catch(e){}}
+
+/* ---------- state ---------- */
+let mode='title',prevMode=null,T=0,g=null;
+const STATS={drift:0,det:0,wrong:0};
+const keys={};
+let menuSel=0,parts=[];
+
+/* ---------- static manual content ---------- */
+const KEYLIST=[
+  [['W','A','S','D'],'Move (arrow keys work too)'],
+  [['Shift'],'Hold to sneak: slower, silent, and Echoes see you at a shorter range'],
+  [['E'],'Talk, examine, use (Enter works too)'],
+  [['Space'],'Disrupt an Echo from behind'],
+  [['Q'],'Chrono Sense: reveal clues and patrol routes'],
+  [['J'],'Casebook: objectives and clues'],
+  [['H'],'Field Manual (this guide)'],
+  [['Esc'],'Pause menu (P works too)'],
+  [['M'],'Sound on or off'],
+  [['↑','↓'],'Choose in menus and on the Deduction Board, Enter to confirm']];
+const STEPS=[
+  'Talk to the people of each era and examine anything that glows. Testimony and objects both become clues in your casebook.',
+  'Lethe\'s hooded Echoes patrol with sight cones. Stay out of the cone. If it turns amber, they\'ve noticed you; red means you\'re about to be caught.',
+  'Hold Shift near an Echo so it can\'t hear you, slip behind it, and press Space to disrupt it.',
+  'With every clue gathered, go to the Deduction Board and reason through the questions. Wrong answers cost Sync.',
+  'Set history right, then walk back through the Time Gate. Time back home is passing quickly, so move with purpose.'];
+const SYSTEMS=[
+  ['Sync','Your link to the timeline. Being caught costs 25, a wrong deduction costs 10. At zero you desynchronise and the chapter restarts.'],
+  ['Drift','Years passing in 2249 while you are away. Lower drift means a better case rank.'],
+  ['Chrono Sense','Press Q for 4 seconds of heightened perception: clues flare, patrol routes appear. Recharges in 9 seconds.']];
+function keyHTML(){return KEYLIST.map(([ks,d])=>`<dt>${ks.map(k=>`<span class="kc">${k}</span>`).join(' ')}</dt><dd>${d}</dd>`).join('')}
+$('#sideKeys').innerHTML=keyHTML();
+$('#sideSteps').innerHTML=STEPS.map(s=>`<li>${s}</li>`).join('');
+
+/* ---------- chapter setup ---------- */
+function newGameState(ci){
+  const ch=CHAPTERS[ci],th=THEMES[ch.theme];
+  const tiles=ch.build();const H=tiles.length,W=tiles[0].length;
+  const ents=ch.ents.map(e=>{const o=Object.assign({},e);o.x=e.x*TS+8;o.y=e.y*TS+12;o.tx=e.x;o.ty=e.y;
+    if(o.k==='warden'){o.path=e.path.map(([dx,dy])=>({x:(e.x+dx)*TS+8,y:(e.y+dy)*TS+12}));o.wi=1%o.path.length;o.ang=0;o.want=0;o.det=0;o.pause=.5;o.down=false;o.fade=0;o.anim=Math.random()*3;
+      const nx=o.path[o.wi];o.ang=o.want=Math.atan2(nx.y-o.y,nx.x-o.x)}
+    if(o.k==='npc'){o.dir='down';o.flip=false}
+    if(o.k==='gate'||o.k==='core')o.solid=1;
+    return o});
+  const st={ci,ch,th,tiles,W,H,ents,atlas:buildAtlas(th),f:{},found:new Set(),sync:100,
+    player:{x:ch.start[0]*TS+8,y:ch.start[1]*TS+12,dir:'down',flip:false,anim:0,moving:false,sneak:false},
+    senseT:0,senseCd:0,invuln:1,flash:0,cam:{x:0,y:0},near:null,pedestals:[null,null,null],
+    startStats:{...STATS}};
+  st.checkpoint={x:st.player.x,y:st.player.y};
+  st.addClue=id=>{if(st.found.has(id))return;st.found.add(id);SFX.clue();toast('Clue added: '+ch.clues[id].t);st.checkpoint={x:st.player.x,y:st.player.y}};
+  st.downCount=()=>st.ents.filter(e=>e.k==='warden'&&e.down).length;
+  return st}
+
+function startChapter(ci,fromRestart){
+  g=newGameState(ci);parts=[];
+  if(!fromRestart){writeSave({ci,stats:{...STATS}})}
+  showCard();
+}
+
+/* ---------- UI: overlays ---------- */
+function setOv(html,dim=true){ov.innerHTML=html;ov.className=dim?'dim':'';ov.scrollTop=0}
+function clearOv(){ov.innerHTML='';ov.className=''}
+let toastTimer=0;
+function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),2200)}
+
+function showTitle(){mode='title';g=null;hud.hidden=true;$('#prompt').hidden=true;$('#dialog').hidden=true;stopAmb();renderTitleMenu();updateSide()}
+function titleItems(){const s=loadSave();return[{t:'New Investigation'},{t:'Continue',off:!s},{t:'Case Files'},{t:'Field Manual'}]}
+function renderTitleMenu(){const it=titleItems();if(it[menuSel]&&it[menuSel].off)menuSel=0;
+  setOv(`<div class="title"><div class="eyebrow">A time-travel detective game</div><h1>CHRONOS<br><span>ARCHIVE</span></h1>
+  <p class="tag">Travel through history. Solve the science. Keep civilisation from forgetting itself.</p>
+  <ul class="menu">${it.map((m,i)=>`<li class="${i===menuSel?'sel':''} ${m.off?'off':''}" data-i="${i}">${m.t}</li>`).join('')}</ul>
+  <div class="foot">↑ ↓ choose · Enter select · keyboard required</div></div>`,false);
+  ov.querySelectorAll('.menu li').forEach(li=>li.onclick=()=>{menuSel=+li.dataset.i;titleAct()})}
+function titleAct(){const it=titleItems()[menuSel];if(it.off){SFX.deny();return}SFX.sel();
+  if(menuSel===0){STATS.drift=0;STATS.det=0;STATS.wrong=0;startChapter(0)}
+  else if(menuSel===1){const s=loadSave();Object.assign(STATS,s.stats||{});startChapter(s.ci)}
+  else if(menuSel===2){showCases()}
+  else showManual()}
+
+const CASES=[
+  {no:'Case 01',nm:'The Library of Echoes',dt:'2249 → 240 BCE · 1610 · 1854',st:'Open',open:1},
+  {no:'Case 02',nm:'The Movable Type',dt:'Kaifeng, Song China · 1040 CE',st:'Sealed'},
+  {no:'Case 03',nm:'The Clockwork Plague',dt:'London · 1665 CE',st:'Sealed'},
+  {no:'Case 04',nm:'Signal from Tau Ceti',dt:'Atacama Desert · 2187 CE',st:'Sealed'}];
+function showCases(){mode='cases';setOv(`<div class="pane"><div class="eyebrow">Chronos Archive</div><h2>Case Files</h2>
+  <p>Each case is a separate story through history. Case 01 is open. The others unseal as the Archive recovers more shelves.</p>
+  <div class="cases">${CASES.map((c,i)=>`<div class="case ${c.open?'':'locked'} ${i===0?'sel':''}"><div class="no">${c.no}</div><div><div class="nm">${c.nm}</div><div class="dt">${c.dt}</div></div><div class="st">${c.st}</div></div>`).join('')}</div>
+  <div class="foot">Enter: open Case 01 · Esc: back</div></div>`)}
+
+function showManual(){prevMode=mode;mode='manual';
+  setOv(`<div class="pane"><div class="eyebrow">Agent handbook</div><h2>Field Manual</h2>
+  <div class="grid2"><div><h3>Keyboard</h3><dl class="keys">${keyHTML()}</dl></div>
+  <div><h3>How to play</h3><ol class="steps">${STEPS.map(s=>`<li>${s}</li>`).join('')}</ol></div></div>
+  <div class="sys">${SYSTEMS.map(([a,b])=>`<div><b>${a}</b><span>${b}</span></div>`).join('')}</div>
+  <div class="foot">H, Esc or Enter: close</div></div>`)}
+function closeManual(){if(prevMode==='title'){showTitle();return}clearOv();mode=prevMode==='pause'?'play':(prevMode||'play');if(prevMode==='pause')showPause()}
+
+function showCard(){mode='transition';hud.hidden=true;$('#prompt').hidden=true;stopAmb();g.cardT=0;const c=g.ch.card;
+  setOv(`<div class="card"><div class="eyebrow">${c.kicker} · ${g.ch.title}</div><div class="yr">${g.ch.year}</div><div class="pl">${g.ch.place}</div>
+  ${c.text.map(t=>`<p>${t}</p>`).join('')}<div class="dil">${c.note}</div><div class="go blink">Press Enter to begin</div></div>`,false);
+  SFX.warp()}
+function beginPlay(){clearOv();mode='play';hud.hidden=false;startAmb(g.th.drone);updateSide();
+  if(g.ci===0)setTimeout(()=>toast('Walk to Dr. Osei and press E'),400)}
+
+function showPause(){mode='pause';const items=['Resume','Field Manual','Restart chapter','Sound: '+(AU.on?'On':'Off'),'Quit to title'];
+  if(menuSel>=items.length)menuSel=0;
+  setOv(`<div class="pane" style="width:46%;margin-top:10%"><div class="eyebrow">${g.ch.year} · ${g.ch.place}</div><h2>Paused</h2>
+  <ul class="menu">${items.map((m,i)=>`<li class="${i===menuSel?'sel':''}">${m}</li>`).join('')}</ul><div class="foot">Esc: resume</div></div>`)}
+function pauseAct(){SFX.sel();const i=menuSel;
+  if(i===0){clearOv();mode='play'}
+  else if(i===1){showManual();prevMode='pause'}
+  else if(i===2){Object.assign(STATS,g.startStats);startChapter(g.ci,true)}
+  else if(i===3){AU.on=!AU.on;if(AU.on)startAmb(g.th.drone);else stopAmb();showPause()}
+  else showTitle()}
+
+function showJournal(){mode='journal';const ch=g.ch;const ob=ch.objectives(g);let cur=ob.findIndex(o=>!o.done);
+  const ids=Object.keys(ch.clues);
+  setOv(`<div class="pane"><div class="eyebrow">Casebook · ${ch.year} · ${ch.place}</div><h2>${ch.title}</h2>
+  <h3>Objectives</h3><ul class="obj">${ob.map((o,i)=>`<li class="${o.done?'done':i===cur?'now':''}">${o.t}</li>`).join('')}</ul>
+  ${ch.final?`<h3>Restored pages</h3><div class="clues">${ch.pages.map(p=>`<div class="clue"><b>${p.name}</b><span>Recovered in ${p.place}.</span></div>`).join('')}</div>`:''}
+  ${ids.length?`<h3>Clues · ${g.found.size}/${ids.length}</h3><div class="clues">${ids.map(id=>g.found.has(id)?`<div class="clue"><b>${ch.clues[id].t}</b><span>${ch.clues[id].d}</span></div>`:`<div class="clue missing"><b>Unknown clue</b><span>Not found yet.</span></div>`).join('')}</div>`:''}
+  <div class="foot">J or Esc: close</div></div>`)}
+
+/* ---------- dialogue ---------- */
+const DLG={lines:[],i:0,shown:0,cb:null};
+const pctx=$('#portrait').getContext('2d');
+function showDialog(lines,cb){if(!lines||!lines.length){cb&&cb();return}DLG.lines=lines;DLG.i=0;DLG.cb=cb||null;DLG.ret=mode;mode='dialog';$('#prompt').hidden=true;$('#dialog').hidden=false;setLine()}
+function setLine(){const [who,text]=DLG.lines[DLG.i];const sp=SPEAK[who]||SPEAK.note;DLG.shown=0;DLG.text=text;
+  const nm=$('#dName'),tx=$('#dText');nm.textContent=sp.name;nm.className='dname'+(sp.pal?'':' note');tx.className='dtext'+(sp.pal?'':' note');tx.textContent='';
+  const pc=$('#portrait');pc.style.display=sp.pal?'block':'none';
+  if(sp.pal){pctx.imageSmoothingEnabled=false;pctx.fillStyle='#1a1d21';pctx.fillRect(0,0,50,50);
+    if(sp.pal==='lethe'){drawCoreOn(pctx,25,25,18,T,true)}
+    else{const s=SPR[sp.pal].down[0];pctx.drawImage(s,0,0,10,10,0,2,50,50);if(who==='imaraEcho'){pctx.fillStyle='rgba(116,203,187,.35)';pctx.fillRect(0,0,50,50)}}}}
+function advanceDialog(){if(DLG.shown<DLG.text.length){DLG.shown=DLG.text.length;$('#dText').textContent=DLG.text;return}
+  DLG.i++;if(DLG.i>=DLG.lines.length){$('#dialog').hidden=true;mode=DLG.ret==='dialog'?'play':DLG.ret;if(mode!=='play'&&mode!=='deduce'&&mode!=='choice')mode='play';const cb=DLG.cb;DLG.cb=null;cb&&cb();return}setLine()}
+
+/* ---------- deduction + choice ---------- */
+const DED={qs:null,qi:0,sel:0,phase:'ask'};
+function openDeduction(){const ch=g.ch;DED.qs=ch.deduction;DED.qi=0;DED.sel=0;DED.phase='ask';mode='deduce';renderDed()}
+function renderDed(shake){const q=DED.qs[DED.qi];const ch=g.ch;
+  setOv(`<div class="pane ded ${shake?'shake':''}"><div class="eyebrow">Deduction Board · Question ${DED.qi+1} of ${DED.qs.length}</div>
+  <div class="q">${q.q}</div><div class="chips">${[...g.found].map(id=>`<span>${ch.clues[id].t}</span>`).join('')}</div>
+  <ul class="opts">${q.o.map((o,i)=>`<li class="${i===DED.sel?'sel':''}" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</li>`).join('')}</ul>
+  ${DED.phase==='right'?`<div class="fb">Correct. ${q.why}</div><div class="foot">Enter: continue</div>`:DED.phase==='wrong'?`<div class="fb bad">That doesn't fit the evidence. Sync −10. Read your clues again and try another answer.</div><div class="foot">Enter: try again</div>`:`<div class="foot">↑ ↓ choose · Enter confirm · Esc step away</div>`}</div>`);
+  ov.querySelectorAll('.opts li').forEach(li=>li.onclick=()=>{if(DED.phase==='ask'){DED.sel=+li.dataset.i;dedKey('Enter')}})}
+function dedKey(k){
+  if(DED.phase==='ask'){
+    if(k==='ArrowUp'||k==='KeyW'){DED.sel=(DED.sel+3)%4;SFX.sel();renderDed()}
+    else if(k==='ArrowDown'||k==='KeyS'){DED.sel=(DED.sel+1)%4;SFX.sel();renderDed()}
+    else if(k==='Enter'||k==='KeyE'||k==='Space'){const q=DED.qs[DED.qi];if(DED.sel===q.a){DED.phase='right';SFX.right();renderDed()}else{DED.phase='wrong';SFX.wrong();g.sync-=10;STATS.wrong++;renderDed(true)}}
+    else if(k==='Escape'){clearOv();mode='play'}
+  }else if(k==='Enter'||k==='KeyE'||k==='Space'){
+    if(DED.phase==='wrong'){DED.phase='ask';renderDed();if(g.sync<=0)desync();return}
+    DED.qi++;DED.sel=0;DED.phase='ask';
+    if(DED.qi>=DED.qs.length){clearOv();mode='play';g.f.deduced=1;g.checkpoint={x:g.player.x,y:g.player.y};toast('Case reasoning complete');
+      const nm={alex:'Eratosthenes',london:'Dr. Snow',padua:'Galileo'}[g.ch.id];showDialog([['note','The red strings on the board all meet at one answer. Take it to '+nm+'.']])}
+    else renderDed()}}
+
+const CHS={};
+function openChoice(title,prompt,opts,cb){CHS.title=title;CHS.prompt=prompt;CHS.opts=opts;CHS.sel=0;CHS.cb=cb;mode='choice';renderChoice()}
+function renderChoice(){setOv(`<div class="pane ded"><div class="eyebrow">${CHS.title}</div><div class="q">${CHS.prompt}</div>
+  <ul class="opts">${CHS.opts.map((o,i)=>`<li class="${i===CHS.sel?'sel':''}" data-i="${i}">${o}</li>`).join('')}</ul><div class="foot">↑ ↓ choose · Enter confirm${CHS.noEsc?'':' · Esc back'}</div></div>`);
+  ov.querySelectorAll('.opts li').forEach(li=>li.onclick=()=>{CHS.sel=+li.dataset.i;choiceKey('Enter')})}
+function choiceKey(k){const n=CHS.opts.length;
+  if(k==='ArrowUp'||k==='KeyW'){CHS.sel=(CHS.sel+n-1)%n;SFX.sel();renderChoice()}
+  else if(k==='ArrowDown'||k==='KeyS'){CHS.sel=(CHS.sel+1)%n;SFX.sel();renderChoice()}
+  else if(k==='Enter'||k==='KeyE'||k==='Space'){clearOv();mode='play';const cb=CHS.cb;cb(CHS.sel)}
+  else if(k==='Escape'&&!CHS.noEsc){clearOv();mode='play'}}
+
+/* ---------- interactions ---------- */
+function interact(e){const ch=g.ch;
+  if(e.k==='npc'){const npc=e;npc.dir='down';const r=ch.talk[e.id](g);showDialog(r[0],r[1]);return}
+  if(e.k==='clue'){const c=ch.clues[e.id];if(!g.found.has(e.id))showDialog([['note',c.see]],()=>g.addClue(e.id));else showDialog([['note',c.see]]);return}
+  if(e.k==='board'){
+    if(g.f.deduced){showDialog([['note','The board is solved. Every string leads to the same answer.']]);return}
+    const n=Object.keys(ch.clues).length;
+    if(g.found.size<n){showDialog([['note','The Deduction Board. '+g.found.size+' of '+n+' clues are pinned. You need every piece of evidence before the strings will connect.']]);return}
+    openDeduction();return}
+  if(e.k==='target'){const r=ch.use[e.id](g);showDialog(r[0],r[1]);return}
+  if(e.k==='prop'){showDialog([['note',e.text]]);return}
+  if(e.k==='gate'){const why=ch.gate(g);if(why){SFX.deny();showDialog([['note',why]])}else travel();return}
+  if(e.k==='pedestal'){usePedestal(e);return}
+  if(e.k==='core'){useCore();return}}
+
+function usePedestal(e){const ch=g.ch;const placed=g.f.placed||0;
+  if(g.pedestals[e.slot]){showDialog([['note','Pedestal '+ROMAN[e.slot]+' holds "'+g.pedestals[e.slot].name+'". It is locked into the fold.']]);return}
+  if(!g.f.met){showDialog([['note','A pedestal humming with gravity. Imara might know what it wants. She is calling from the south-west corner.']]);return}
+  if(e.slot!==placed){showDialog([['note','The fold resists. Fill the pedestals in order, starting with Pedestal '+ROMAN[placed]+'.']]);return}
+  const left=ch.pages.filter(p=>!g.pedestals.includes(p));const order=['london','alex','padua'];left.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  const prompts=['Which discovery came first in history?','Which discovery came next?','Which discovery came last?'];
+  openChoice('Pedestal '+ROMAN[e.slot],prompts[e.slot],left.map(p=>p.name+' · '+p.place),i=>{const p=left[i];
+    if(p.id===ch.pages[e.slot].id){g.pedestals[e.slot]=p;g.f.placed=placed+1;SFX.right();toast('Locked: '+p.name);g.checkpoint={x:g.player.x,y:g.player.y};
+      if(g.f.placed>=3)showDialog([['note','All three pages lock into the fold. The shield around Lethe\'s core flickers out.']])}
+    else{SFX.wrong();g.sync-=10;STATS.wrong++;g.flash=.5;showDialog([['note','The fold throws the page back at you. That isn\'t when it happened. Sync −10.']],()=>{if(g.sync<=0)desync()})}})}
+
+function useCore(){
+  if((g.f.placed||0)<3){SFX.deny();showDialog([['note','Lethe\'s core, wrapped in a shield of folded time. Lock all three pages first.']]);return}
+  showDialog([
+    ['lethe','AGENT SOLEN. YOU HAVE RESTORED THREE MISTAKES.'],
+    ['lethe','EVERY DISCOVERY YOU SAVED LED TO MORE. LARGER MAPS, LARGER WARS. MORE MEDICINE, MORE MOUTHS. MORE STARS, MORE DISTANCE.'],
+    ['lethe','LET THEM FORGET, AND HUMANITY RESTS. I AM OFFERING PEACE.']
+  ],()=>{CHS.noEsc=true;openChoice('Answer Lethe','What do you say?',[
+      'Peace without memory is just sleep.',
+      'Maybe you\'re right. Maybe they\'d be happier.',
+      'Knowing isn\'t wisdom. But nobody gets wise without knowing first.'],i=>{CHS.noEsc=false;
+      if(i===1){SFX.wrong();g.sync-=15;STATS.wrong++;g.flash=.6;showDialog([['lethe','THEN STAND ASIDE AND LET ME WORK.'],['note','The core surges and the shelves groan. Lethe almost had you. Sync −15.']],()=>{if(g.sync<=0)desync()})}
+      else showDialog([
+        ['rhea',i===0?'Peace without memory is just sleep. We don\'t keep history so we stay the same.':'Knowing isn\'t wisdom. We don\'t keep history so we stay the same.'],
+        ['rhea','We keep it so we can keep correcting ourselves. You can\'t correct what you\'ve forgotten.'],
+        ['lethe','...CORRECTION... ACKNOWLEDGED.'],
+        ['note','The core folds in on itself, a page closing. Every shelf in the library flares gold, then settles.'],
+        ['imaraEcho','Solen? The readings are stable. All of them. Come home.']
+      ],()=>{g.f.won=1;finishCase()})})})}
+
+function travel(){SFX.warp();const next=g.ci+1;
+  if(next>=CHAPTERS.length){finishCase();return}
+  startChapter(next)}
+
+function finishCase(){mode='end';hud.hidden=true;$('#prompt').hidden=true;stopAmb();writeSave(null);try{localStorage.removeItem('chronos-archive-save')}catch(e){}
+  const drift=STATS.drift;const score=Math.round(1000-drift*8-STATS.det*50-STATS.wrong*30);
+  const rank=score>=800?'Archivist Prime':score>=600?'Chrono Detective':score>=400?'Field Agent':'Recruit';
+  setOv(`<div class="pane"><div class="eyebrow">Case 01 closed</div><h2>The Library of Echoes</h2>
+  <p>The three pages are fixed in place. Eratosthenes measures the Earth. Snow\'s map founds a science. Galileo\'s moons open the sky. In 2249 the navigation grid comes back online, clinics restart, and the launch towers on the coast light up again.</p>
+  <div class="stats"><div><b>+${drift.toFixed(1)}</b><span>years of drift in 2249</span></div><div><b>${STATS.det}</b><span>times caught</span></div><div><b>${STATS.wrong}</b><span>wrong deductions</span></div><div><b>${Math.max(0,score)}</b><span>case score</span></div></div>
+  <div class="rank">Rank: ${rank}</div>
+  <p style="margin-top:1em;color:var(--dim)">Deep in the stacks, one more shelf has started to fade. The spines are printed in clay type, and the place on them reads Kaifeng.</p>
+  <div class="foot">Enter: return to the title screen</div></div>`)}
+
+function desync(){mode='desync';hud.hidden=true;$('#prompt').hidden=true;$('#dialog').hidden=true;stopAmb();SFX.caught();
+  setOv(`<div class="pane" style="width:60%;margin-top:9%"><div class="eyebrow">${g.ch.year} · ${g.ch.place}</div><div class="big">DESYNCHRONISED</div>
+  <p>Your link to the timeline broke. The Archive pulls you back to the start of this chapter. Time in 2249 kept passing.</p><div class="foot">Enter: try again</div></div>`)}
+
+function caught(){SFX.caught();g.sync-=25;STATS.det++;g.flash=1;
+  g.player.x=g.checkpoint.x;g.player.y=g.checkpoint.y;g.invuln=2.2;
+  for(const w of g.ents)if(w.k==='warden'){w.det=0;w.alerted=false}
+  if(g.sync<=0){desync();return}
+  toast('Spotted! Sync −25. Back to your last checkpoint.')}
+
+/* ---------- collision ---------- */
+const SOLID=new Set(['#','B','c','=','w','T','v','r']);
+const OPAQUE=new Set(['#','B','c','T']);
+function tileAt(px,py){const tx=Math.floor(px/TS),ty=Math.floor(py/TS);if(ty<0||ty>=g.H||tx<0||tx>=g.W)return '#';return g.tiles[ty][tx]}
+function blocked(x,y){
+  const pts=[[x-4,y-3],[x+4,y-3],[x-4,y],[x+4,y]];
+  for(const [px,py] of pts)if(SOLID.has(tileAt(px,py)))return true;
+  for(const e of g.ents){if(!e.solid&&e.k!=='npc')continue;if(e.k==='warden')continue;const rw=e.k==='gate'?13:(e.k==='core'?10:6),rh=e.k==='gate'?6:4;
+    if(Math.abs(x-e.x)<rw+4&&y>e.y-rh-3&&y<e.y+rh)return true}
+  return false}
+function moveP(p,dx,dy){if(dx){const nx=p.x+dx;if(!blocked(nx,p.y))p.x=nx}if(dy){const ny=p.y+dy;if(!blocked(p.x,ny))p.y=ny}}
+function los(x0,y0,x1,y1){const d=Math.hypot(x1-x0,y1-y0),n=Math.ceil(d/4);for(let i=1;i<n;i++){const t=i/n;if(OPAQUE.has(tileAt(x0+(x1-x0)*t,y0+(y1-y0)*t)))return false}return true}
+function seeRange(){return g.player.sneak?58:80}
+function canSee(w,p){const ex=w.x,ey=w.y-8;const dx=p.x-ex,dy=p.y-4-ey,d=Math.hypot(dx,dy);if(d>seeRange())return false;
+  if(Math.abs(angDiff(Math.atan2(dy,dx),w.ang))>.62)return false;return los(ex,ey,p.x,p.y-4)}
+
+/* ---------- update ---------- */
+function update(dt){
+  T+=dt;
+  if(mode==='dialog'){if(DLG.shown<DLG.text.length){const before=Math.floor(DLG.shown);DLG.shown=Math.min(DLG.text.length,DLG.shown+dt*65);if(Math.floor(DLG.shown)!==before){$('#dText').textContent=DLG.text.slice(0,Math.floor(DLG.shown));if(before%3===0)SFX.blip()}}}
+  if(mode==='transition'&&g)g.cardT+=dt;
+  if(mode==='play')updatePlay(dt);
+  if(g&&g.flash>0)g.flash=Math.max(0,g.flash-dt*1.6);
+  updateParts(dt);
+}
+function updatePlay(dt){
+  const p=g.player,ch=g.ch;
+  let mx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0);
+  let my=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0);
+  p.sneak=!!(keys.ShiftLeft||keys.ShiftRight);
+  const sp=p.sneak?36:70;
+  if(mx&&my){mx*=.7071;my*=.7071}
+  p.moving=!!(mx||my);
+  if(p.moving){if(Math.abs(mx)>=Math.abs(my)&&mx){p.dir='side';p.flip=mx<0}else p.dir=my<0?'up':'down';p.anim+=dt*(p.sneak?5:9);moveP(p,mx*sp*dt,my*sp*dt)}
+  STATS.drift+=ch.drift*dt;
+  g.senseT=Math.max(0,g.senseT-dt);g.senseCd=Math.max(0,g.senseCd-dt);g.invuln=Math.max(0,g.invuln-dt);
+  // wardens
+  for(const w of g.ents){if(w.k!=='warden')continue;
+    if(w.down){w.fade+=dt;continue}
+    w.anim+=dt;
+    const d=Math.hypot(p.x-w.x,p.y-w.y);
+    if(g.invuln<=0&&!p.sneak&&p.moving&&d<34){w.want=Math.atan2(p.y-w.y,p.x-w.x);if(w.det<.3){w.det=.3;if(!w.alerted){SFX.alert();w.alerted=true}}}
+    if(w.det>.22){w.want=Math.atan2(p.y-w.y,p.x-w.x);w.moving=false}
+    else if(w.pause>0){w.pause-=dt;w.moving=false}
+    else{const tg=w.path[w.wi];const dx=tg.x-w.x,dy=tg.y-w.y,dd=Math.hypot(dx,dy);
+      if(dd<1.2){w.x=tg.x;w.y=tg.y;w.wi=(w.wi+1)%w.path.length;w.pause=.9;w.moving=false;const nx=w.path[w.wi];w.want=Math.atan2(nx.y-w.y,nx.x-w.x)}
+      else{w.want=Math.atan2(dy,dx);if(Math.abs(angDiff(w.want,w.ang))<.35){const s=Math.min(dd,26*dt);w.x+=dx/dd*s;w.y+=dy/dd*s;w.moving=true}else w.moving=false}}
+    const da=angDiff(w.want,w.ang);const turn=4.2*dt;w.ang+=Math.abs(da)<turn?da:Math.sign(da)*turn;
+    if(g.invuln<=0&&canSee(w,p)){const rate=(p.sneak?.7:1.35)*(1.35-d/seeRange());w.det+=dt*Math.max(.35,rate);if(!w.alerted&&w.det>.25){SFX.alert();w.alerted=true}}
+    else{w.det=Math.max(0,w.det-dt*.42);if(w.det<.05)w.alerted=false}
+    if(w.det>=1){caught();return}}
+  // npcs face player
+  for(const e of g.ents)if(e.k==='npc'){const dx=p.x-e.x,dy=p.y-e.y;if(Math.hypot(dx,dy)<40){if(Math.abs(dx)>Math.abs(dy)){e.dir='side';e.flip=dx<0}else e.dir=dy<0?'up':'down'}}
+  // nearest interactable
+  let best=null,bd=1e9;
+  for(const e of g.ents){if(!['npc','clue','board','target','prop','gate','pedestal','core'].includes(e.k))continue;
+    const r=e.k==='gate'?32:(e.k==='core'?28:22);const d=Math.hypot(p.x-e.x,(p.y-e.y)*1.2);if(d<r&&d<bd){bd=d;best=e}}
+  g.near=best;
+  // camera
+  g.cam.x=Math.round(clamp(p.x-VW/2,0,g.W*TS-VW));g.cam.y=Math.round(clamp(p.y-8-VH/2,0,g.H*TS-VH));
+  spawnAmbient(dt);
+}
+function tryTakedown(){const p=g.player;let tgt=null,bd=24;
+  for(const w of g.ents){if(w.k!=='warden'||w.down)continue;const d=Math.hypot(p.x-w.x,p.y-w.y);if(d<bd){bd=d;tgt=w}}
+  if(!tgt){return false}
+  const a=Math.atan2(p.y-tgt.y,p.x-tgt.x);
+  if(Math.abs(angDiff(a,tgt.ang))>1.25&&tgt.det<.6){tgt.down=true;tgt.fade=0;SFX.take();burst(tgt.x,tgt.y-8,'116,203,187',22);toast('Echo disrupted');g.checkpoint={x:p.x,y:p.y};return true}
+  SFX.deny();toast('It can see you. Get behind it first.');tgt.det=Math.max(tgt.det,.5);return true}
+
+/* ---------- particles ---------- */
+function burst(x,y,col,n){for(let i=0;i<n;i++){const a=Math.random()*2*PI,s=20+Math.random()*50;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-10,life:.6+Math.random()*.5,max:1,col,sz:1+(Math.random()<.3?1:0),world:1})}}
+function spawnAmbient(dt){const th=g.th,c=g.cam;
+  if(th.dust&&Math.random()<dt*14)parts.push({x:c.x+Math.random()*VW,y:c.y+Math.random()*VH,vx:th.palm?18+Math.random()*12:(Math.random()-.5)*6,vy:th.palm?(Math.random()-.5)*4:-2-Math.random()*4,life:3+Math.random()*3,max:6,col:th.dust,sz:1,world:1,fadeIn:1});
+  if(th.tess&&Math.random()<dt*10)parts.push({x:c.x+Math.random()*VW,y:c.y+VH+4,vx:(Math.random()-.5)*4,vy:-10-Math.random()*14,life:4+Math.random()*3,max:7,col:'116,203,187',sz:Math.random()<.2?2:1,world:1,fadeIn:1});
+  for(const e of g.ents){if(e.k!=='light')continue;if((e.kind==='torch'||e.kind==='brazier')&&Math.random()<dt*3)parts.push({x:e.x+(Math.random()-.5)*3,y:e.y-15,vx:(Math.random()-.5)*6,vy:-16-Math.random()*10,life:.7+Math.random()*.5,max:1.2,col:'255,170,80',sz:1,world:1})}
+  if(parts.length>400)parts.splice(0,parts.length-400)}
+function updateParts(dt){for(const q of parts){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt}parts=parts.filter(q=>q.life>0)}
+function drawParts(cx,cy){for(const q of parts){let a=Math.min(1,q.life/(q.max*.3));if(q.fadeIn)a=Math.min(a,(q.max-q.life)/1);ctx.fillStyle=`rgba(${q.col},${Math.max(0,a*.75)})`;ctx.fillRect(Math.round(q.x-cx),Math.round(q.y-cy),q.sz,q.sz)}}
+
+/* ---------- drawing helpers ---------- */
+function rc(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function drawPortal(c,cx,cy,R,t,on){c.save();const col=on?'116,203,187':'95,122,120';
+  if(on){const gr=c.createRadialGradient(cx,cy,2,cx,cy,R);gr.addColorStop(0,'rgba(116,203,187,.35)');gr.addColorStop(.7,'rgba(116,203,187,.08)');gr.addColorStop(1,'rgba(116,203,187,0)');c.fillStyle=gr;c.beginPath();c.arc(cx,cy,R,0,2*PI);c.fill()}
+  for(let i=0;i<5;i++){const r=R-i*R*.17;const segs=5+i*2;const rot=t*(i%2?-.55:.75)*(.5+i*.25);
+    c.strokeStyle=`rgba(${col},${(on?.9:.4)-i*.12})`;c.lineWidth=i===0?2:1;
+    for(let s=0;s<segs;s++){const a0=rot+s*2*PI/segs;c.beginPath();c.arc(cx,cy,r,a0,a0+(2*PI/segs)*.62);c.stroke()}}
+  if(on){for(let k=0;k<10;k++){const a=t*1.4+k*.63,rr=R*.25+((t*12+k*7)%(R*.6));c.fillStyle='rgba(200,240,230,.8)';c.fillRect(Math.round(cx+Math.cos(a)*rr),Math.round(cy+Math.sin(a)*rr),1,1)}}
+  c.restore()}
+function drawCoreOn(c,cx,cy,R,t,active){c.save();
+  const gr=c.createRadialGradient(cx,cy,1,cx,cy,R);gr.addColorStop(0,active?'#2a1a14':'#0d1416');gr.addColorStop(.75,'#06090a');gr.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=gr;c.beginPath();c.arc(cx,cy,R*.8,0,2*PI);c.fill();
+  c.strokeStyle=active?'rgba(201,102,63,.9)':'rgba(116,203,187,.75)';c.lineWidth=1;
+  for(let i=0;i<3;i++){c.beginPath();c.ellipse(cx,cy,R*(.6+i*.18),R*(.2+i*.08),t*(.6+i*.3)+i,0,2*PI);c.stroke()}
+  for(let k=0;k<5;k++){if(Math.sin(t*9+k*3)>.3){c.fillStyle=active?'rgba(214,180,122,.8)':'rgba(116,203,187,.8)';c.fillRect(Math.round(cx-R*.5+((k*37+t*40)%(R))),Math.round(cy-R*.4+k*R*.18),3+k%3,1)}}
+  c.fillStyle=active?'#c9663f':'#74cbbb';c.fillRect(Math.round(cx)-1,Math.round(cy)-1,2,2);c.restore()}
+
+function drawProp(e,sx,sy){const t=T;
+  switch(e.sprite||e.k){
+  case 'codex':rc(sx-5,sy-8,10,7,'#4a3020');rc(sx-4,sy-7,8,5,'#e3d8c0');rc(sx,sy-7,1,5,'#b8a888');for(let i=0;i<3;i++)rc(sx-3+(i%2)*4,sy-6+i,2,1,`rgba(74,77,80,${.5+.5*Math.sin(t*3+i)})`);rc(sx-1+Math.round(Math.sin(t*2)*2),sy-11-((t*8)%5),1,1,'rgba(116,203,187,.8)');break;
+  case 'glint':break;
+  case 'anchor':{rc(sx-5,sy-3,10,2,'#6a6e74');rc(sx-5,sy-18,10,2,'#6a6e74');rc(sx-5,sy-16,1,13,'#4a4e54');rc(sx+4,sy-16,1,13,'#4a4e54');
+    rc(sx-3,sy-16,6,5,'rgba(116,203,187,.25)');rc(sx-1,sy-11,2,2,'rgba(116,203,187,.25)');rc(sx-3,sy-9,6,6,'rgba(116,203,187,.25)');
+    for(let i=0;i<4;i++){const yy=sy-4-((t*6+i*3)%12);rc(sx-1+(i%2),yy,1,1,'#d6b47a')}break}
+  case 'gnomon':rc(sx-7,sy-5,14,5,'#8a7048');rc(sx-6,sy-5,12,1,'#a8885a');rc(sx-5,sy-4,10,3,'#6a5436');rc(sx,sy-15,1,11,'#c8a24a');rc(sx+1,sy-4,4,1,'#2a2014');rc(sx-1,sy-16,3,1,'#e0c060');break;
+  case 'scroll':rc(sx-5,sy-5,10,4,'#e3d3a8');rc(sx-6,sy-6,2,6,'#c8b48a');rc(sx+4,sy-6,2,6,'#c8b48a');rc(sx-3,sy-4,6,1,'#7a6a4a');rc(sx-3,sy-3,4,1,'rgba(116,203,187,.9)');break;
+  case 'sealed':rc(sx-6,sy-8,12,7,'#5a4028');rc(sx-5,sy-7,10,2,'#6e5034');rc(sx-4,sy-11,8,3,'#e3d3a8');rc(sx-5,sy-12,2,5,'#c8b48a');rc(sx+3,sy-12,2,5,'#c8b48a');rc(sx-1,sy-10,2,2,'#9a2a2a');break;
+  case 'pump':{rc(sx-4,sy-4,8,4,'#24262a');rc(sx-2,sy-17,4,13,'#3a3d42');rc(sx-2,sy-17,1,13,'#4c5056');rc(sx-3,sy-19,6,2,'#2a2c30');rc(sx-6,sy-11,4,2,'#3a3d42');
+    if(!(e.id==='pump'&&g.f.restored)){rc(sx+2,sy-15,5,1,'#4c5056');rc(sx+6,sy-14,1,4,'#4c5056')}break}
+  case 'map':rc(sx-6,sy-7,12,7,'#d8cfb8');rc(sx-6,sy-7,12,1,'#bfb59c');for(let i=0;i<6;i++)rc(sx-5+i*2,sy-4-(i===2||i===3?2:0),1,(i===2||i===3)?3:1,'#1a1a1a');rc(sx-1,sy-5,1,1,'#3a5a8a');break;
+  case 'letter':rc(sx-5,sy-6,10,6,'#e0d6c0');rc(sx-5,sy-6,10,1,'#bfb59c');rc(sx-4,sy-5,1,1,'#bfb59c');rc(sx-3,sy-4,1,1,'#bfb59c');rc(sx-2,sy-3,4,1,'#bfb59c');rc(sx+2,sy-4,1,1,'#bfb59c');rc(sx+3,sy-5,1,1,'#bfb59c');rc(sx+2,sy-2,2,2,'#8a2a2a');break;
+  case 'pamphlet':rc(sx-4,sy-7,8,7,'#d8d4c8');rc(sx-3,sy-6,6,1,'#1a1a1a');rc(sx-3,sy-4,5,1,'#4a4a4a');rc(sx-3,sy-3,6,1,'#4a4a4a');rc(sx+3,sy-7,1,7,`rgba(116,203,187,${.4+.3*Math.sin(t*4)})`);break;
+  case 'note':rc(sx-4,sy-6,8,6,'#e0d3b0');rc(sx-1,sy-4,2,2,'#5a4020');rc(sx-3,sy-3,1,1,'#3a2a18');rc(sx+2,sy-3,1,1,'#3a2a18');rc(sx+3,sy-4,1,1,'#3a2a18');break;
+  case 'lens':rc(sx-5,sy-4,10,4,'#5a1a2a');rc(sx-3,sy-7,6,6,'#a8c8d0');rc(sx-2,sy-6,2,2,'#e8f4f8');rc(sx-3,sy-7,6,1,'#c8a24a');break;
+  case 'telescope':{rc(sx-5,sy-1,1,1,'#3a2a1a');rc(sx+4,sy-1,1,1,'#3a2a1a');for(let i=0;i<8;i++){rc(sx-5+i*.6,sy-1-i,1,1,'#4a3424');rc(sx+4-i*.6,sy-1-i,1,1,'#4a3424')}
+    for(let i=0;i<14;i++){rc(sx-6+i,sy-8-i*.6,2,2,i<2||i>11?'#c8a24a':'#6a4a2a')}
+    if(!g.f.restored)rc(sx+8,sy-17,1,1,`rgba(116,203,187,${.5+.5*Math.sin(t*5)})`);break}
+  case 'board':{rc(sx-7,sy-3,1,3,'#3a2a1a');rc(sx+6,sy-3,1,3,'#3a2a1a');rc(sx-8,sy-19,16,16,'#3a2a1a');rc(sx-7,sy-18,14,14,'#8a6a44');
+    const pins=[[-5,-16],[3,-15],[-3,-9],[4,-7],[0,-12]];ctx.strokeStyle='#b03a2a';ctx.lineWidth=1;ctx.beginPath();
+    for(let i=0;i<pins.length;i++){const [a,b]=pins[i];if(i)ctx.lineTo(sx+a+.5,sy+b+.5);else ctx.moveTo(sx+a+.5,sy+b+.5)}ctx.stroke();
+    for(const [a,b] of pins){rc(sx+a-1,sy+b+1,3,2,'#e0d6c0');rc(sx+a,sy+b,1,1,'#d03a2a')}
+    if(g.f.deduced)rc(sx-7,sy-18,14,1,'#74cbbb');break}
+  case 'pedestal':{rc(sx-6,sy-9,12,9,'#2a3236');rc(sx-6,sy-9,12,2,'#3e484e');rc(sx-5,sy-1,10,1,'#1a1f22');ctx.fillStyle='#74cbbb';
+    const rn=ROMAN[e.slot];for(let i=0;i<rn.length;i++)rc(sx-rn.length+i*2,sy-6,1,3,'#74cbbb');
+    if(g.pedestals[e.slot]){const by=sy-17+Math.sin(t*2+e.slot)*1.5;rc(sx-4,by,8,6,'#e8dcc0');rc(sx,by,1,6,'#b8a888');rc(sx-3,by+2,2,1,'#8a7a5a');rc(sx+2,by+3,2,1,'#8a7a5a')}
+    break}
+  }}
+function drawLightProp(e,sx,sy){const t=T,f=Math.sin(t*12+e.x)*.5+.5;
+  if(e.kind==='torch'){rc(sx-1,sy-12,2,12,'#4a3020');rc(sx-2,sy-14,4,2,'#2a1a10');rc(sx-1,sy-17,2,3,f>.5?'#ffb050':'#ff9030');rc(sx,sy-19+(f>.6?0:1),1,2,'#ffe090')}
+  else if(e.kind==='brazier'){rc(sx-5,sy-6,10,4,'#3a2a1a');rc(sx-4,sy-2,1,2,'#2a1a10');rc(sx+3,sy-2,1,2,'#2a1a10');rc(sx-4,sy-9,8,3,f>.5?'#ff9a40':'#ff8030');rc(sx-2,sy-11,4,2,'#ffd070');rc(sx-1,sy-13+(f>.5?0:1),2,2,'#fff0b0')}
+  else if(e.kind==='lamp'){rc(sx-1,sy-16,2,16,'#1a1c1f');rc(sx-3,sy-21,6,5,'#1a1c1f');rc(sx-2,sy-20,4,3,'#f2c66a');rc(sx-3,sy-1,6,1,'#1a1c1f')}
+  else if(e.kind==='holo'){rc(sx,sy-14,1,14,'#3a4246');rc(sx-2,sy-1,5,1,'#3a4246');rc(sx-2,sy-17,5,3,`rgba(116,203,187,${.6+.3*f})`);rc(sx-1,sy-18,3,5,`rgba(116,203,187,${.4+.2*f})`)}
+  else if(e.kind==='candle'){rc(sx-3,sy-4,6,3,'#5a3e26');rc(sx-1,sy-8,2,4,'#e8e0c8');rc(sx,sy-10,1,2,f>.5?'#ffd070':'#ffb040')}}
+
+function drawChar(sprSet,dir,frame,flip,sx,sy,alpha){const s=sprSet[dir][frame];ctx.save();if(alpha!==undefined)ctx.globalAlpha=alpha;
+  if(flip){ctx.translate(Math.round(sx)+5,Math.round(sy)-14);ctx.scale(-1,1);ctx.drawImage(s,0,0)}else ctx.drawImage(s,Math.round(sx)-5,Math.round(sy)-14);ctx.restore()}
+function dirOfAng(a){const c=Math.cos(a),s=Math.sin(a);if(Math.abs(c)>Math.abs(s))return{dir:'side',flip:c<0};return{dir:s<0?'up':'down',flip:false}}
+
+/* ---------- world render ---------- */
+let vignette=null;
+function makeVignette(){vignette=cnv(VW,VH);const x=vignette.getContext('2d');const gr=x.createRadialGradient(VW/2,VH/2,VH*.35,VW/2,VH/2,VW*.62);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');x.fillStyle=gr;x.fillRect(0,0,VW,VH)}
+makeVignette();
+function isWallish(x,y){if(y>=g.H)return false;if(y<0||x<0||x>=g.W)return true;return g.tiles[y][x]==='#'}
+function drawWorld(){
+  const c=g.cam,A=g.atlas;ctx.fillStyle='#000';ctx.fillRect(0,0,VW,VH);
+  const x0=Math.floor(c.x/TS),y0=Math.floor(c.y/TS),x1=Math.min(g.W-1,x0+Math.ceil(VW/TS)+1),y1=Math.min(g.H-1,y0+Math.ceil(VH/TS)+1);
+  const wf=Math.floor(T*2)%2;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const ch=g.tiles[y][x],h=hash(x,y),sx=x*TS-c.x,sy=y*TS-c.y;let img;
+    switch(ch){case '#':img=isWallish(x,y+1)?A.wallTop:A.wallFace;break;case '.':img=A.floor[h%4];break;case ',':img=A.floor2[h%4];break;case 'g':img=A.grass[h%4];break;
+      case 'B':img=A.shelf[h%2];break;case 'c':img=A.col[h%4];break;case '=':img=A.table[h%4];break;case 'r':img=A.rubble[h%4];break;case 'T':img=A.tree[h%2];break;case 'w':img=A.water[(wf+h)%2];break;case 'v':img=A.void[h%3];break;default:img=A.floor[0]}
+    ctx.drawImage(img,sx,sy);
+    if(ch!=='#'&&ch!=='B'&&ch!=='v'&&y>0&&(g.tiles[y-1][x]==='#'||g.tiles[y-1][x]==='B')){ctx.fillStyle='rgba(0,0,0,.28)';ctx.fillRect(sx,sy,TS,3);ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(sx,sy+3,TS,2)}
+    if(ch==='v'&&(h%7===0)){const a=.4+.6*Math.abs(Math.sin(T*1.5+h));ctx.fillStyle=`rgba(240,236,220,${a})`;ctx.fillRect(sx+(h%13),sy+(h%11),1,1)}}
+  // Jupiter in Padua sky
+  if(g.th.grass){const jx=37*TS+6-c.x,jy=3*TS-c.y;rc(jx-1,jy-1,3,3,'#e8d8b0');rc(jx,jy-2,1,5,'rgba(232,216,176,.4)');
+    const ms=[-9,-5,6,11];ms.forEach((m,i)=>rc(jx+m*(g.f.restored?1:.6)+Math.round(Math.sin(T*.2+i)*1),jy,1,1,'#f4f0e0'))}
+  // drawables
+  const list=[];for(const e of g.ents){if(e.k==='warden'&&e.down&&e.fade>.6)continue;list.push(e)}list.push({k:'player',x:g.player.x,y:g.player.y});
+  list.sort((a,b)=>a.y-b.y);
+  for(const e of list){const sx=e.x-c.x,sy=e.y-c.y;if(sx<-40||sx>VW+40||sy<-40||sy>VH+50)continue;
+    if(e.k==='player'){const p=g.player;if(g.invuln>0&&Math.floor(T*12)%2)continue;rc(sx-4,sy-1,8,2,'rgba(0,0,0,.35)');
+      drawChar(SPR.player,p.dir,p.moving?Math.floor(p.anim)%2:0,p.flip,sx,sy);if(p.sneak){rc(sx-6,sy+1,12,1,'rgba(116,203,187,.35)')}continue}
+    if(e.k==='npc'){rc(sx-4,sy-1,8,2,'rgba(0,0,0,.35)');const pal=e.id==='imaraEcho'?'imara':e.id;
+      if(e.id==='imaraEcho'){drawChar(SPR.imara,e.dir,0,e.flip,sx,sy+Math.sin(T*2)*1,.55+.15*Math.sin(T*5));rc(sx-6,sy-15+((T*20)%16),12,1,'rgba(116,203,187,.4)')}
+      else drawChar(SPR[pal],e.dir,Math.floor(T*1.5+e.tx)%8===0?1:0,e.flip,sx,sy);continue}
+    if(e.k==='warden'){const d=dirOfAng(e.ang);const a=e.down?Math.max(0,1-e.fade/.6):1;rc(sx-4,sy-1,8,2,`rgba(0,0,0,${.35*a})`);
+      const gl=!e.down&&Math.sin(e.anim*7)>.93?1:0;drawChar(SPR.warden,d.dir,e.moving?Math.floor(e.anim*5)%2:0,d.flip,sx+gl,sy,a);
+      if(gl)rc(sx-5,sy-9,10,1,'rgba(116,203,187,.6)');continue}
+    if(e.k==='gate'){const on=!g.ch.gate(g);rc(sx-14,sy-2,28,4,'rgba(0,0,0,.4)');rc(sx-15,sy-1,30,2,'#2a3034');drawPortal(ctx,sx,sy-16,16,T,on);continue}
+    if(e.k==='core'){drawCoreOn(ctx,sx,sy-10,18,T,(g.f.placed||0)>=3);if((g.f.placed||0)<3){ctx.strokeStyle=`rgba(116,203,187,${.35+.2*Math.sin(T*3)})`;ctx.beginPath();ctx.arc(sx,sy-10,21,0,2*PI);ctx.stroke()}continue}
+    if(e.k==='light'){drawLightProp(e,sx,sy);continue}
+    drawProp(e,sx,sy)}
+  // fog
+  if(g.th.fog){for(let i=0;i<7;i++){const fx=((i*137+T*(6+i))%(VW+200))-100,fy=40+((i*71)%200);const gr=ctx.createRadialGradient(fx,fy,4,fx,fy,90);gr.addColorStop(0,'rgba(150,160,170,.10)');gr.addColorStop(1,'rgba(150,160,170,0)');ctx.fillStyle=gr;ctx.fillRect(fx-90,fy-90,180,180)}}
+  drawParts(c.x,c.y);
+  // lighting
+  const lights=[];const p=g.player;lights.push([p.x,p.y-8,g.senseT>0?96:70,null]);
+  for(const e of g.ents){
+    if(e.k==='light'){const f=1+Math.sin(T*10+e.x)*.04;const warm=e.kind==='holo'?'116,203,187':e.kind==='lamp'?'242,198,106':'255,160,70';lights.push([e.x,e.y-14,(e.kind==='candle'?44:e.kind==='holo'?52:62)*f,warm])}
+    else if(e.k==='gate')lights.push([e.x,e.y-16,!g.ch.gate(g)?84:46,'116,203,187']);
+    else if(e.k==='core')lights.push([e.x,e.y-10,70,(g.f.placed||0)>=3?'201,102,63':'116,203,187']);
+    else if(e.k==='clue'&&!g.found.has(e.id))lights.push([e.x,e.y-4,20,'116,203,187']);
+    else if(e.k==='warden'&&!e.down)lights.push([e.x,e.y-10,16,'116,203,187']);
+    else if(e.k==='npc'||e.k==='board'||e.k==='target'||e.k==='pedestal')lights.push([e.x,e.y-8,22,null])}
+  lx.globalCompositeOperation='source-over';lx.clearRect(0,0,VW,VH);lx.fillStyle=`rgba(4,5,9,${g.th.ambient})`;lx.fillRect(0,0,VW,VH);
+  lx.globalCompositeOperation='destination-out';
+  for(const [x,y,r] of lights){const sx=x-c.x,sy=y-c.y;if(sx<-r||sx>VW+r||sy<-r||sy>VH+r)continue;const gr=lx.createRadialGradient(sx,sy,0,sx,sy,r);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(.5,'rgba(0,0,0,.6)');gr.addColorStop(1,'rgba(0,0,0,0)');lx.fillStyle=gr;lx.fillRect(sx-r,sy-r,r*2,r*2)}
+  ctx.drawImage(lightC,0,0);
+  ctx.globalCompositeOperation='lighter';
+  for(const [x,y,r,col] of lights){if(!col)continue;const sx=x-c.x,sy=y-c.y;if(sx<-r||sx>VW+r||sy<-r||sy>VH+r)continue;const gr=ctx.createRadialGradient(sx,sy,0,sx,sy,r*.8);gr.addColorStop(0,`rgba(${col},.16)`);gr.addColorStop(1,`rgba(${col},0)`);ctx.fillStyle=gr;ctx.fillRect(sx-r,sy-r,r*2,r*2)}
+  ctx.globalCompositeOperation='source-over';
+  // vision cones + patrol routes
+  const sense=g.senseT>0;
+  for(const w of g.ents){if(w.k!=='warden'||w.down)continue;const ex=w.x-c.x,ey=w.y-8-c.y;if(ex<-100||ex>VW+100||ey<-100||ey>VH+100)continue;
+    if(sense){ctx.strokeStyle='rgba(214,180,122,.55)';ctx.setLineDash([2,3]);ctx.beginPath();w.path.forEach((pt,i)=>{const X=pt.x-c.x,Y=pt.y-4-c.y;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});if(w.path.length>2)ctx.closePath();ctx.stroke();ctx.setLineDash([])}
+    const rng=seeRange();const col=w.det>.6?'201,102,63':w.det>.2?'214,180,122':'116,203,187';
+    ctx.fillStyle=`rgba(${col},${(sense?.2:.1)+w.det*.18})`;ctx.beginPath();ctx.moveTo(ex,ey);
+    for(let i=0;i<=18;i++){const a=w.ang-.62+1.24*i/18;let d=0;while(d<rng){d+=3;if(OPAQUE.has(tileAt(w.x+Math.cos(a)*d,w.y-8+Math.sin(a)*d)))break}ctx.lineTo(ex+Math.cos(a)*d,ey+Math.sin(a)*d)}
+    ctx.closePath();ctx.fill();
+    if(w.det>.05){const bx=Math.round(ex-6),by=Math.round(ey-16);rc(bx,by,12,2,'rgba(0,0,0,.7)');rc(bx,by,Math.round(12*Math.min(1,w.det)),2,`rgb(${col})`);
+      const glyph=w.det>.6?'!':'?';rc(ex,by-7,1,1,'#000');ctx.fillStyle=`rgb(${col})`;if(glyph==='!'){ctx.fillRect(Math.round(ex),by-8,1,4);ctx.fillRect(Math.round(ex),by-3,1,1)}else{ctx.fillRect(Math.round(ex)-1,by-8,3,1);ctx.fillRect(Math.round(ex)+1,by-7,1,1);ctx.fillRect(Math.round(ex),by-6,1,1);ctx.fillRect(Math.round(ex),by-4,1,1)}}}
+  // clue sparkles
+  for(const e of g.ents){if(e.k!=='clue'||g.found.has(e.id))continue;const sx=e.x-c.x,sy=e.y-8-c.y;const ph=(T*2+e.tx)%2;
+    const a=sense?1:.55;ctx.fillStyle=`rgba(200,245,235,${a*(ph<1?ph:2-ph)})`;ctx.fillRect(Math.round(sx),Math.round(sy-3),1,7);ctx.fillRect(Math.round(sx-3),Math.round(sy),7,1);
+    if(sense){ctx.strokeStyle=`rgba(116,203,187,${.8-((T*1.5)%1)*.8})`;ctx.beginPath();ctx.arc(sx,sy,4+((T*1.5)%1)*14,0,2*PI);ctx.stroke()}}
+  if(sense){ctx.fillStyle='rgba(116,203,187,.05)';ctx.fillRect(0,0,VW,VH);
+    for(const e of g.ents){if(!['npc','board','target','pedestal','core'].includes(e.k))continue;const sx=e.x-c.x,sy=e.y-c.y;ctx.strokeStyle='rgba(214,180,122,.6)';ctx.strokeRect(Math.round(sx)-8.5,Math.round(sy)-22.5,17,24)}}
+  ctx.drawImage(vignette,0,0);
+  if(g.flash>0){ctx.fillStyle=`rgba(201,102,63,${g.flash*.35})`;ctx.fillRect(0,0,VW,VH)}
+}
+
+/* ---------- title + warp backgrounds ---------- */
+const RUINS=(()=>{const r=mkRng(7),a=[];for(let i=0;i<26;i++){const x=r()*VW,w=8+r()*34,h=30+r()*120;a.push([x,w,h,r()])}return a})();
+const DUST=Array.from({length:90},(_,i)=>({x:Math.random()*VW,y:Math.random()*VH,s:6+Math.random()*16,a:Math.random()}));
+function drawTitleBG(){const gr=ctx.createLinearGradient(0,0,0,VH);gr.addColorStop(0,'#1a1410');gr.addColorStop(.55,'#2a1f16');gr.addColorStop(1,'#0c0a08');ctx.fillStyle=gr;ctx.fillRect(0,0,VW,VH);
+  const hz=ctx.createRadialGradient(340,120,10,340,120,240);hz.addColorStop(0,'rgba(214,180,122,.22)');hz.addColorStop(1,'rgba(214,180,122,0)');ctx.fillStyle=hz;ctx.fillRect(0,0,VW,VH);
+  for(const [x,w,h,s] of RUINS){const base=212;ctx.fillStyle=s<.5?'#15100c':'#1d1611';ctx.fillRect(Math.round(x),base-h,Math.round(w),h);
+    for(let k=0;k<3;k++)if(s*10%1>.4){ctx.fillStyle=`rgba(116,203,187,${.25+.2*Math.sin(T*2+x+k)})`;ctx.fillRect(Math.round(x+3+k*4),Math.round(base-h+10+k*9),2,4)}}
+  drawPortal(ctx,340,128,74,T,true);
+  ctx.fillStyle='#2a2018';ctx.fillRect(0,212,VW,58);
+  for(let i=0;i<VW;i+=3){ctx.fillStyle=`rgba(214,180,122,${.05+.04*Math.sin(i*.3)})`;ctx.fillRect(i,214+(i*7)%40,2,1)}
+  ctx.save();ctx.imageSmoothingEnabled=false;const s=SPR.player.up[0];ctx.drawImage(s,322,168,30,42);ctx.restore();
+  ctx.fillStyle='rgba(0,0,0,.4)';ctx.fillRect(320,209,34,3);
+  for(const d of DUST){d.x+=d.s*.016;d.y+=Math.sin(T+d.a*6)*.1;if(d.x>VW)d.x=-2;ctx.fillStyle=`rgba(230,205,150,${.25+.25*d.a})`;ctx.fillRect(Math.round(d.x),Math.round(d.y),1,1)}
+  ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,230,VH);
+  ctx.drawImage(vignette,0,0)}
+function drawWarp(){ctx.fillStyle='#050608';ctx.fillRect(0,0,VW,VH);const cx=VW*.74,cy=VH*.5;
+  for(let i=0;i<22;i++){const z=((T*.35)+i/22)%1;const r=z*z*360;ctx.strokeStyle=i%3===0?`rgba(214,180,122,${(1-z)*.5})`:`rgba(116,203,187,${(1-z)*.55})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(cx,cy,r,r*.62,0,0,2*PI);ctx.stroke()}
+  for(let i=0;i<70;i++){const a=i*2.399,z=((T*.5)+i*.137)%1;const r0=z*z*300,r1=r0+6+z*24;ctx.strokeStyle=`rgba(230,235,230,${z*.6})`;ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0*.62);ctx.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1*.62);ctx.stroke()}
+  const gr=ctx.createRadialGradient(cx,cy,0,cx,cy,40);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(.6,'rgba(0,0,0,.9)');gr.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gr;ctx.fillRect(cx-40,cy-40,80,80);
+  ctx.strokeStyle='rgba(214,180,122,.7)';ctx.beginPath();ctx.ellipse(cx,cy,30,18,0,0,2*PI);ctx.stroke();
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,VW*.6,VH);ctx.drawImage(vignette,0,0)}
+
+function render(){ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
+  if(mode==='transition'||mode==='end'){drawWarp();return}
+  if(!g||mode==='title'||mode==='cases'||(mode==='manual'&&prevMode==='title')){drawTitleBG();return}
+  drawWorld()}
+
+/* ---------- HUD + side panel ---------- */
+let hudCache='';
+function updateHUD(){if(!g||hud.hidden)return;const ob=g.ch.objectives(g);const cur=ob.find(o=>!o.done);
+  const s=Math.max(0,g.sync);const sense=g.senseT>0?'Chrono Sense active':g.senseCd>0?'Recharging '+Math.ceil(g.senseCd)+'s':'Chrono Sense ready';
+  const key=[g.ch.year,s,STATS.drift.toFixed(1),cur?cur.t:'',sense].join('|');if(key===hudCache)return;hudCache=key;
+  $('#hEra').innerHTML=g.ch.year+'<small>'+g.ch.place+'</small>';$('#hSync').style.width=s+'%';$('#hBar').classList.toggle('low',s<=35);
+  $('#hDrift').innerHTML=g.ch.drift?'2249 drift <b>+'+STATS.drift.toFixed(1)+' yrs</b>':'Present day · no drift';
+  $('#hObj').textContent=cur?cur.t:'';const hs=$('#hSense');hs.textContent=sense;hs.className=(g.senseT<=0&&g.senseCd<=0)?'ready':'';
+  updateSide()}
+let sideCache='';
+function updateSide(){let key,html1,html2;
+  if(!g){key='none';html1='No case open<small>Start a new investigation from the title screen.</small>';html2=''}
+  else{const ob=g.ch.objectives(g);const ci=ob.findIndex(o=>!o.done);key=g.ci+'|'+ob.map(o=>o.t+o.done).join();html1=g.ch.title+'<small>'+g.ch.year+' · '+g.ch.place+'</small>';
+    html2=ob.map((o,i)=>`<li class="${o.done?'done':i===ci?'now':''}">${o.t}</li>`).join('')}
+  if(key===sideCache)return;sideCache=key;$('#sideCase').innerHTML=html1;$('#sideObj').innerHTML=html2}
+function updatePrompt(){const pr=$('#prompt');if(mode!=='play'||!g||!g.near){pr.hidden=true;return}const e=g.near,ch=g.ch;let lab;
+  if(e.k==='npc')lab='Talk · '+SPEAK[e.id].name;else if(e.k==='clue')lab=g.found.has(e.id)?'Examine again':'Examine';else if(e.k==='board')lab='Deduction Board';
+  else if(e.k==='target')lab=ch.targetLabel[e.id];else if(e.k==='prop')lab=e.label;else if(e.k==='gate')lab='Time Gate';else if(e.k==='pedestal')lab='Pedestal '+ROMAN[e.slot];else lab='Lethe\'s core';
+  pr.innerHTML='<span class="kc">E</span>'+lab;pr.hidden=false;const sx=(e.x-g.cam.x)/VW*100,sy=(e.y-g.cam.y-(e.k==='gate'?36:e.k==='board'?24:20))/VH*100;pr.style.left=sx+'%';pr.style.top=Math.max(8,sy)+'%'}
+
+/* ---------- input ---------- */
+const PREVENT=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab']);
+addEventListener('keydown',e=>{const k=e.code;if(PREVENT.has(k))e.preventDefault();audioInit();
+  const wasDown=keys[k];keys[k]=true;if(wasDown&&e.repeat&&mode!=='title'&&mode!=='pause'&&mode!=='deduce'&&mode!=='choice')return;handleKey(k)});
+addEventListener('keyup',e=>{keys[e.code]=false});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
+screenEl.addEventListener('pointerdown',()=>{screenEl.focus();audioInit()});
+const isOK=k=>k==='Enter'||k==='Space'||k==='KeyE'||k==='NumpadEnter';
+function handleKey(k){
+  switch(mode){
+  case 'title':{const n=titleItems().length;if(k==='ArrowUp'||k==='KeyW'){menuSel=(menuSel+n-1)%n;SFX.sel();renderTitleMenu()}else if(k==='ArrowDown'||k==='KeyS'){menuSel=(menuSel+1)%n;SFX.sel();renderTitleMenu()}else if(isOK(k))titleAct();else if(k==='KeyH')showManual();break}
+  case 'cases':if(k==='Escape'||k==='Backspace'){SFX.sel();showTitle()}else if(isOK(k)){SFX.sel();STATS.drift=0;STATS.det=0;STATS.wrong=0;startChapter(0)}break;
+  case 'manual':if(k==='KeyH'||k==='Escape'||isOK(k)){SFX.sel();closeManual()}break;
+  case 'transition':if(isOK(k)&&g.cardT>.5)beginPlay();break;
+  case 'dialog':if(isOK(k))advanceDialog();break;
+  case 'journal':if(k==='KeyJ'||k==='Escape'||k==='Enter'){clearOv();mode='play'}break;
+  case 'pause':{const n=5;if(k==='ArrowUp'||k==='KeyW'){menuSel=(menuSel+n-1)%n;SFX.sel();showPause()}else if(k==='ArrowDown'||k==='KeyS'){menuSel=(menuSel+1)%n;SFX.sel();showPause()}else if(isOK(k))pauseAct();else if(k==='Escape'||k==='KeyP'){clearOv();mode='play'}break}
+  case 'deduce':dedKey(k==='NumpadEnter'?'Enter':k);break;
+  case 'choice':choiceKey(k==='NumpadEnter'?'Enter':k);break;
+  case 'desync':if(isOK(k)){Object.assign(STATS,{...STATS,wrong:STATS.wrong});startChapter(g.ci,true)}break;
+  case 'end':if(isOK(k)){menuSel=0;showTitle()}break;
+  case 'play':
+    if(k==='KeyE'||k==='Enter'||k==='NumpadEnter'){if(g.near)interact(g.near)}
+    else if(k==='Space'){if(!tryTakedown()&&g.near)interact(g.near)}
+    else if(k==='KeyQ'){if(g.senseT<=0&&g.senseCd<=0){g.senseT=4;g.senseCd=9+4;SFX.sense()}else SFX.deny()}
+    else if(k==='KeyJ')showJournal();
+    else if(k==='KeyH'||k==='Tab')showManual();
+    else if(k==='Escape'||k==='KeyP'){menuSel=0;showPause()}
+    else if(k==='KeyM'){AU.on=!AU.on;if(AU.on)startAmb(g.th.drone);else stopAmb();toast(AU.on?'Sound on':'Sound off')}
+    break}}
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;try{update(dt);render();updateHUD();updatePrompt()}catch(err){console.error(err)}requestAnimationFrame(frame)}
+showTitle();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
